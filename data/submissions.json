@@ -1,0 +1,31 @@
+[
+  {
+    "id": "2cd1ee15-7cf2-442e-b802-c69f474cabf8",
+    "email": "test@example.com",
+    "answers": {
+      "O1": 5,
+      "C1": 4
+    },
+    "scores": {
+      "Openness": 5,
+      "Conscientiousness": 4
+    },
+    "receivedAt": "2025-12-18T11:37:32.891Z"
+  },
+  {
+    "id": "4f630456-476b-419e-8820-0e2148422efa",
+    "email": "enqurko@gmail.com",
+    "selectedProduct": "lamp",
+    "type": "interest_signup",
+    "timestamp": "2025-12-18T12:11:28.368Z",
+    "receivedAt": "2025-12-18T12:11:28.417Z"
+  },
+  {
+    "id": "845d1642-75e9-4118-ab3b-0d6482133d16",
+    "email": "enqurko@gmail.com",
+    "selectedProduct": "keychain",
+    "type": "interest_signup",
+    "timestamp": "2025-12-18T12:12:14.966Z",
+    "receivedAt": "2025-12-18T12:12:14.989Z"
+  }
+]
