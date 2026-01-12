@@ -1,0 +1,506 @@
+.quizSection {
+    position: relative;
+    padding: 6rem 1rem;
+    min-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle at center, #2e1065 0%, #0f172a 100%);
+    overflow: hidden;
+    color: white;
+}
+
+/* Stars background effect */
+.quizSection::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image:
+        radial-gradient(white 1px, transparent 1px),
+        radial-gradient(white 1px, transparent 1px);
+    background-size: 50px 50px, 100px 100px;
+    background-position: 0 0, 25px 25px;
+    opacity: 0.1;
+    pointer-events: none;
+}
+
+.container {
+    width: 100%;
+    max-width: 600px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3rem;
+    position: relative;
+    z-index: 10;
+}
+
+.stepperContainer {
+    width: 100%;
+    margin-bottom: 1rem;
+}
+
+.stepperLabel {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+    color: #a3a3a3;
+    font-weight: 500;
+}
+
+.progressBar {
+    width: 100%;
+    height: 4px;
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.progressFill {
+    height: 100%;
+    background: linear-gradient(90deg, #6366f1, #a855f7);
+    width: 20%;
+    /* Step 1 of 5 */
+    border-radius: 2px;
+}
+
+.questionTitle {
+    font-size: 2.5rem;
+    text-align: center;
+    margin-bottom: 2rem;
+    font-weight: 700;
+}
+
+.activeOptionDisplay {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    margin-bottom: 2rem;
+    transform-style: preserve-3d;
+    transition: transform 0.5s ease;
+}
+
+.planetVisual {
+    width: min(90vw, 900px);
+    /* Massive size */
+    height: min(90vw, 900px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 2rem;
+    position: relative;
+    /* Removed filter transition from container, will apply per image */
+}
+
+.planetImageWrapper {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    transition: opacity 0.7s ease, transform 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+    opacity: 0;
+    transform: scale(0.8);
+    pointer-events: none;
+    filter: drop-shadow(0 0 50px var(--glow-color, rgba(99, 102, 241, 0.3)));
+}
+
+.planetImageWrapper.active {
+    opacity: 1;
+    transform: scale(1);
+    z-index: 5;
+    animation: float 6s ease-in-out infinite;
+}
+
+.planetIcon {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.optionLabel {
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    color: var(--glow-color, white);
+    transition: color 0.3s ease;
+}
+
+.optionDesc {
+    font-size: 1.1rem;
+    color: #cbd5e1;
+    max-width: 80%;
+}
+
+.sliderContainer {
+    width: 100%;
+    padding: 0 1rem;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+    position: relative;
+}
+
+/* Slider Track Ends (Circles) */
+.slider::before,
+.slider::after {
+    content: '';
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.2);
+    top: 50%;
+    transform: translateY(-50%);
+    border: 2px solid #0f172a;
+}
+
+.slider::before {
+    left: 0;
+}
+
+.slider::after {
+    right: 0;
+}
+
+/* Slider Thumb */
+.slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--glow-color, #6366f1);
+    box-shadow: 0 0 20px var(--glow-color, #6366f1);
+    cursor: pointer;
+    border: 4px solid white;
+    transition: background-color 0.2s, transform 0.2s, box-shadow 0.2s;
+    position: relative;
+    z-index: 20;
+}
+
+.slider::-webkit-slider-thumb:hover {
+    transform: scale(1.1);
+}
+
+.slider::-moz-range-thumb {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--glow-color, #6366f1);
+    box-shadow: 0 0 20px var(--glow-color, #6366f1);
+    cursor: pointer;
+    border: 4px solid white;
+    transition: background-color 0.2s;
+    position: relative;
+    z-index: 20;
+}
+
+.continueBtn {
+    margin-top: 2rem;
+    padding: 1rem 4rem;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    color: white;
+    border: none;
+    border-radius: 50px;
+    font-size: 1.1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.continueBtn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 25px rgba(99, 102, 241, 0.6);
+}
+
+@keyframes float {
+
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-15px);
+    }
+}
+
+/* Mobile adjustments */
+@media (max-width: 600px) {
+    .quizSection {
+        padding: 2rem 1rem;
+        /* Reduced padding */
+        min-height: 100dvh;
+        /* Ensure full viewport consideration */
+        justify-content: space-between;
+        /* Distribute space */
+    }
+
+    .container {
+        gap: 1rem;
+        /* Reduced gap */
+        height: 100%;
+        justify-content: space-evenly;
+    }
+
+    .questionTitle {
+        font-size: 1.5rem;
+        /* Smaller title */
+        margin-bottom: 0.5rem;
+    }
+
+    .activeOptionDisplay {
+        margin-bottom: 0.5rem;
+        flex-grow: 1;
+        justify-content: center;
+    }
+
+    .planetVisual {
+        width: 100vw;
+        height: 80vw;
+        /* Reduced from 100vw to fit vertical space */
+        max-width: 350px;
+        max-height: 350px;
+        margin-bottom: 0.5rem;
+    }
+
+    .optionLabel {
+        font-size: 1.5rem;
+        margin-bottom: 0.25rem;
+    }
+
+    .optionDesc {
+        font-size: 0.9rem;
+    }
+
+    .sliderContainer {
+        margin-bottom: 1rem;
+    }
+
+    .continueBtn {
+        margin-top: 0;
+        padding: 0.8rem 3rem;
+        margin-bottom: 1rem;
+        /* Add some bottom spacing */
+    }
+}
+
+.emailForm {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+    animation: fadeIn 0.5s ease-out;
+}
+
+.emailInput {
+    width: 100%;
+    padding: 1rem 1.5rem;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 50px;
+    color: white;
+    font-size: 1.1rem;
+    outline: none;
+    transition: all 0.3s ease;
+    text-align: center;
+}
+
+.emailInput:focus {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.4);
+    box-shadow: 0 0 15px rgba(255, 255, 255, 0.1);
+}
+
+.emailInput::placeholder {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.emailSubtext {
+    color: #cbd5e1;
+    text-align: center;
+    font-size: 0.95rem;
+    margin-top: -0.5rem;
+}
+
+.successMessage {
+    text-align: center;
+    animation: fadeIn 0.5s ease-out;
+}
+
+.successIcon {
+    font-size: 4rem;
+    display: block;
+    margin-bottom: 1rem;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Mobile adjustments */
+@media (max-width: 600px) {
+    .quizSection {
+        padding: 2rem 1rem;
+        /* Reduced padding */
+        min-height: 100dvh;
+        /* Ensure full viewport consideration */
+        justify-content: space-between;
+        /* Distribute space */
+    }
+
+    .container {
+        gap: 1rem;
+        /* Reduced gap */
+        height: 100%;
+        justify-content: space-evenly;
+    }
+
+    .questionTitle {
+        font-size: 1.5rem;
+        /* Smaller title */
+        margin-bottom: 0.5rem;
+    }
+
+    .activeOptionDisplay {
+        margin-bottom: 0.5rem;
+        flex-grow: 1;
+        justify-content: center;
+    }
+
+    .planetVisual {
+        width: 100vw;
+        height: 80vw;
+        /* Reduced from 100vw to fit vertical space */
+        max-width: 350px;
+        max-height: 350px;
+        margin-bottom: 0.5rem;
+    }
+
+    .optionLabel {
+        font-size: 1.5rem;
+        margin-bottom: 0.25rem;
+    }
+
+    .optionDesc {
+        font-size: 0.9rem;
+    }
+
+    .sliderContainer {
+        margin-bottom: 1rem;
+    }
+
+    .artifactPreviewContainer {
+        width: min(80vw, 500px);
+        height: min(80vw, 500px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 2rem;
+        position: relative;
+        animation: fadeIn 0.5s ease-out;
+    }
+
+    .artifactPreviewImageWrapper {
+        width: 100%;
+        height: 100%;
+        position: relative;
+        filter: drop-shadow(0 0 40px rgba(99, 102, 241, 0.4));
+        animation: float 6s ease-in-out infinite;
+    }
+
+    .artifactPreviewImage {
+        object-fit: contain;
+    }
+
+    .artifactThumbnails {
+        display: flex;
+        justify-content: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+        width: 100%;
+        margin-bottom: 2rem;
+    }
+
+    .artifactThumbnailCard {
+        background: rgba(255, 255, 255, 0.05);
+        border: 2px solid rgba(255, 255, 255, 0.1);
+        border-radius: 15px;
+        padding: 0.5rem;
+        width: 100px;
+        height: 100px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .artifactThumbnailCard:hover {
+        background: rgba(255, 255, 255, 0.15);
+        transform: translateY(-2px);
+    }
+
+    .artifactThumbnailCard.selected {
+        background: rgba(99, 102, 241, 0.2);
+        border-color: #6366f1;
+        box-shadow: 0 0 15px rgba(99, 102, 241, 0.3);
+    }
+
+    .thumbnailImageContainer {
+        width: 100%;
+        height: 80%;
+        position: relative;
+        margin-bottom: 0.25rem;
+    }
+
+    .thumbnailLabel {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #cbd5e1;
+    }
+
+    @media (max-width: 600px) {
+        .artifactPreviewContainer {
+            width: 80vw;
+            height: 80vw;
+        }
+
+        .artifactThumbnailCard {
+            width: 80px;
+            height: 80px;
+        }
+    }
+}
