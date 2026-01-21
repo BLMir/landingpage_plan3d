@@ -197,7 +197,7 @@ export default function WorldQuiz() {
                                         src={currentImage}
                                         alt="Planet transition"
                                         fill
-                                        sizes="(max-width: 768px) 90vw, 600px"
+                                        sizes="(max-width: 768px) 90vw, 500px"
                                         className={styles.planetIcon}
                                         priority={true}
                                     />

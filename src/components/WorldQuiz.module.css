@@ -88,9 +88,9 @@
 }
 
 .planetVisual {
-    width: min(90vw, 900px);
-    /* Massive size */
-    height: min(90vw, 900px);
+    width: min(90vw, 500px);
+    /* Reduced size to 500px */
+    height: min(90vw, 500px);
     display: flex;
     align-items: center;
     justify-content: center;
