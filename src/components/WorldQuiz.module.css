@@ -67,6 +67,7 @@
     width: 20%;
     /* Step 1 of 5 */
     border-radius: 2px;
+    transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .questionTitle {
@@ -199,6 +200,13 @@
 
 .slider::-webkit-slider-thumb:hover {
     transform: scale(1.1);
+    box-shadow: 0 0 30px var(--glow-color, #6366f1);
+}
+
+.slider:active::-webkit-slider-thumb {
+    transform: scale(1.2);
+    box-shadow: 0 0 40px var(--glow-color, #6366f1);
+    filter: brightness(1.2);
 }
 
 .slider::-moz-range-thumb {
