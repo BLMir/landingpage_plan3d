@@ -55,12 +55,12 @@ const questions = [
 ];
 
 const artifactOptions = [
-    { id: 'artifact_1', label: 'Digital - for free!', format: 'Digital', image: '/artifacts/Format_1.png', priceTiers: [0], subtitle: 'In which format would you like your planet?' },
-    { id: 'artifact_2', label: 'Poster', format: 'Poster', image: '/artifacts/Format_2.png', priceTiers: [12, 22, 35], subtitle: 'Get a 20% off!' },
-    { id: 'artifact_3', label: 'Lamp', format: 'Lamp', image: '/artifacts/Format_3.png', priceTiers: [45, 65, 95], subtitle: 'Get a 20% off!' },
-    { id: 'artifact_4', label: 'Necklace', format: 'Necklace', image: '/artifacts/Format_4.png', priceTiers: [24, 39, 55], subtitle: 'Get a 20% off!' },
-    { id: 'artifact_5', label: 'Earrings', format: 'Earrings', image: '/artifacts/Format_5.png', priceTiers: [18, 29, 42], subtitle: 'Get a 20% off!' },
-    { id: 'artifact_6', label: 'Bracelet', format: 'Bracelet', image: '/artifacts/Format_6.png', priceTiers: [15, 25, 35], subtitle: 'Get a 20% off!' },
+    { id: 'artifact_1', label: 'Digital - for free!', format: 'Digital', image: '/artifact/Format_1.png', priceTiers: [0], subtitle: 'In which format would you like your planet?' },
+    { id: 'artifact_2', label: 'Poster', format: 'Poster', image: '/artifact/Format_2.png', priceTiers: [12, 22, 35], subtitle: 'Get a 20% off!' },
+    { id: 'artifact_3', label: 'Lamp', format: 'Lamp', image: '/artifact/Format_3.png', priceTiers: [45, 65, 95], subtitle: 'Get a 20% off!' },
+    { id: 'artifact_4', label: 'Necklace', format: 'Necklace', image: '/artifact/Format_4.png', priceTiers: [24, 39, 55], subtitle: 'Get a 20% off!' },
+    { id: 'artifact_5', label: 'Earrings', format: 'Earrings', image: '/artifact/Format_5.png', priceTiers: [18, 29, 42], subtitle: 'Get a 20% off!' },
+    { id: 'artifact_6', label: 'Bracelet', format: 'Bracelet', image: '/artifact/Format_6.png', priceTiers: [15, 25, 35], subtitle: 'Get a 20% off!' },
 ];
 
 export default function WorldQuiz() {
