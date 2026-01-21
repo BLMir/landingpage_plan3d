@@ -63,82 +63,46 @@ export default function PersonalityForm() {
 
     return (
         <section className={styles.container} id="form">
-            <div className={styles.splitLayout}>
-                <div className={styles.infoSide}>
-                    <h2 className={styles.heading}>How it Works</h2>
-                    <p className={styles.description}>
-                        We use the scientific <strong>Big 5 Personality Model</strong> to map your mind onto a physical sphere.
-                    </p>
-                    <ul className={styles.steps}>
-                        <li>
-                            <span className={styles.stepNum}>1</span>
-                            <div>
-                                <strong>The Questionnaire</strong>
-                                <p>You answer a set of questions designed to measure Openness, Conscientiousness, Extraversion, Agreeableness, and Neuroticism.</p>
-                            </div>
-                        </li>
-                        <li>
-                            <span className={styles.stepNum}>2</span>
-                            <div>
-                                <strong>The Algorithm</strong>
-                                <p>Our engine translates your trait scores into terrain features. High Openness creates tall peaks; High Agreeableness forms smooth valleys.</p>
-                            </div>
-                        </li>
-                        <li>
-                            <span className={styles.stepNum}>3</span>
-                            <div>
-                                <strong>The Artifact</strong>
-                                <p>We 3D print your unique world into a lamp, jewelry, or keepsake.</p>
-                            </div>
-                        </li>
-                    </ul>
-                </div>
-
-                <div className={styles.formSide}>
-                    <div className={styles.formCard}>
-                        <h3>Start Your Journey</h3>
-                        <p>Enter your email to reveal product options.</p>
-                        <form onSubmit={handleSubmit} className={styles.form}>
-                            <div className={styles.emailSection}>
-                                <label className={styles.label}>Email Address</label>
-                                <input
-                                    type="email"
-                                    required
-                                    placeholder="your@email.com"
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    className={styles.input}
-                                />
-                            </div>
-
-                            <div className={`${styles.productSelection} ${isEmailValid ? styles.visible : ''}`}>
-                                <p className={styles.selectionLabel}>Which format do you prefer?</p>
-                                <div className={styles.optionsGrid}>
-                                    {productOptions.map((option) => (
-                                        <div
-                                            key={option.id}
-                                            className={`${styles.optionCard} ${selectedProduct === option.id ? styles.selected : ''}`}
-                                            onClick={() => setSelectedProduct(option.id)}
-                                        >
-                                            <span className={styles.optionIcon}>{option.icon}</span>
-                                            <span className={styles.optionLabel}>{option.label}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {error && <p className={styles.error}>{error}</p>}
-
-                            <button
-                                type="submit"
-                                disabled={submitting || !isEmailValid || !selectedProduct}
-                                className={styles.submitBtn}
-                            >
-                                {submitting ? 'Joining...' : 'Get Early Access'}
-                            </button>
-                        </form>
+            <div className={styles.formCard} style={{ maxWidth: '500px', margin: '0 auto' }}>
+                <form onSubmit={handleSubmit} className={styles.form}>
+                    <div className={styles.emailSection}>
+                        <label className={styles.label}>Email Address</label>
+                        <input
+                            type="email"
+                            required
+                            placeholder="your@email.com"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            className={styles.input}
+                        />
                     </div>
-                </div>
+
+                    <div className={`${styles.productSelection} ${isEmailValid ? styles.visible : ''}`}>
+                        <p className={styles.selectionLabel}>Which format do you prefer?</p>
+                        <div className={styles.optionsGrid}>
+                            {productOptions.map((option) => (
+                                <div
+                                    key={option.id}
+                                    className={`${styles.optionCard} ${selectedProduct === option.id ? styles.selected : ''}`}
+                                    onClick={() => setSelectedProduct(option.id)}
+                                >
+                                    <span className={styles.optionIcon}>{option.icon}</span>
+                                    <span className={styles.optionLabel}>{option.label}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {error && <p className={styles.error}>{error}</p>}
+
+                    <button
+                        type="submit"
+                        disabled={submitting || !isEmailValid || !selectedProduct}
+                        className={styles.submitBtn}
+                    >
+                        {submitting ? 'Joining...' : 'Get Early Access'}
+                    </button>
+                </form>
             </div>
         </section>
     );

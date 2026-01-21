@@ -105,9 +105,9 @@
     left: 0;
     width: 100%;
     height: 100%;
-    transition: opacity 0.7s ease, transform 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: opacity 1.2s ease, transform 1.2s cubic-bezier(0.45, 0, 0.55, 1);
     opacity: 0;
-    transform: scale(0.8);
+    transform: scale(0.85);
     pointer-events: none;
     filter: drop-shadow(0 0 50px var(--glow-color, rgba(99, 102, 241, 0.3)));
 }
@@ -116,7 +116,7 @@
     opacity: 1;
     transform: scale(1);
     z-index: 5;
-    animation: float 6s ease-in-out infinite;
+    animation: float 8s ease-in-out infinite;
 }
 
 .planetIcon {
@@ -139,87 +139,95 @@
     max-width: 80%;
 }
 
-.sliderContainer {
-    width: 100%;
-    padding: 0 1rem;
+.headerLogo {
+    width: 80px;
+    height: 80px;
+    margin-bottom: 1rem;
     position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.headerLogoImage {
+    object-fit: contain;
+    filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.5));
+}
+
+.logoSliderWrapper {
+    width: 160%;
+    /* Wider slider */
+    margin-left: -30%;
+    /* Center it */
+    position: relative;
+    height: 80px;
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
-.slider {
+.sliderTrackLine {
+    position: absolute;
+    width: 100%;
+    height: 2px;
+    background: rgba(255, 255, 255, 0.1);
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 1;
+}
+
+.logoSlider {
     -webkit-appearance: none;
     appearance: none;
     width: 100%;
-    height: 4px;
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 2px;
+    height: 100%;
+    background: transparent;
     outline: none;
     cursor: pointer;
     position: relative;
+    z-index: 2;
 }
 
-/* Slider Track Ends (Circles) */
-.slider::before,
-.slider::after {
-    content: '';
-    position: absolute;
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.2);
-    top: 50%;
-    transform: translateY(-50%);
-    border: 2px solid #0f172a;
-}
-
-.slider::before {
-    left: 0;
-}
-
-.slider::after {
-    right: 0;
-}
-
-/* Slider Thumb */
-.slider::-webkit-slider-thumb {
+/* Slider Thumb - Webkit */
+.logoSlider::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
-    width: 32px;
-    height: 32px;
+    width: 64px;
+    height: 64px;
+    background-image: var(--thumb-image);
+    background-size: contain;
+    background-position: center;
+    background-repeat: no-repeat;
     border-radius: 50%;
-    background: var(--glow-color, #6366f1);
-    box-shadow: 0 0 20px var(--glow-color, #6366f1);
+    box-shadow: 0 0 20px var(--glow-color);
     cursor: pointer;
-    border: 4px solid white;
-    transition: background-color 0.2s, transform 0.2s, box-shadow 0.2s;
-    position: relative;
-    z-index: 20;
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), filter 0.2s;
+    filter: drop-shadow(0 0 10px var(--glow-color));
 }
 
-.slider::-webkit-slider-thumb:hover {
+.logoSlider::-webkit-slider-thumb:hover {
     transform: scale(1.1);
-    box-shadow: 0 0 30px var(--glow-color, #6366f1);
 }
 
-.slider:active::-webkit-slider-thumb {
+.logoSlider:active::-webkit-slider-thumb {
     transform: scale(1.2);
-    box-shadow: 0 0 40px var(--glow-color, #6366f1);
-    filter: brightness(1.2);
+    filter: drop-shadow(0 0 20px var(--glow-color));
 }
 
-.slider::-moz-range-thumb {
-    width: 32px;
-    height: 32px;
+/* Slider Thumb - Firefox */
+.logoSlider::-moz-range-thumb {
+    width: 64px;
+    height: 64px;
+    background-image: var(--thumb-image);
+    background-size: contain;
+    background-position: center;
+    background-repeat: no-repeat;
+    border: none;
     border-radius: 50%;
-    background: var(--glow-color, #6366f1);
-    box-shadow: 0 0 20px var(--glow-color, #6366f1);
+    box-shadow: 0 0 20px var(--glow-color);
     cursor: pointer;
-    border: 4px solid white;
-    transition: background-color 0.2s;
-    position: relative;
-    z-index: 20;
+    filter: drop-shadow(0 0 10px var(--glow-color));
+    background-color: transparent;
 }
 
 .continueBtn {

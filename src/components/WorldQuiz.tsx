@@ -11,6 +11,7 @@ const questions = [
         folder: '1_How empathetic are you_',
         lowPrefix: '1_low',
         highPrefix: '1_high',
+        logo: '/1_Quiz Planet Images/1_How empathetic are you_/1_logo.png',
         color: '#0ea5e9'
     },
     {
@@ -19,6 +20,7 @@ const questions = [
         folder: '2_How sociable are you_',
         lowPrefix: '2_low',
         highPrefix: '2_high',
+        logo: '/1_Quiz Planet Images/2_How sociable are you_/2_logo.png',
         color: '#22c55e'
     },
     {
@@ -27,6 +29,7 @@ const questions = [
         folder: '3_How persistent are you_',
         lowPrefix: '3_low',
         highPrefix: '3_high',
+        logo: '/1_Quiz Planet Images/3_How persistent are you_/3_logo.png',
         color: '#f97316'
     },
     {
@@ -35,6 +38,7 @@ const questions = [
         folder: '4_How curious are you_',
         lowPrefix: '4_low',
         highPrefix: '4_high',
+        logo: '/1_Quiz Planet Images/4_How curious are you_/4_logo.png',
         color: '#38bdf8'
     },
     {
@@ -43,6 +47,7 @@ const questions = [
         folder: '5_How relaxed are you_',
         lowPrefix: '5_low',
         highPrefix: '5_high',
+        logo: '/1_Quiz Planet Images/5_How relaxed are you_/5_logo.png',
         color: '#eab308'
     },
 ];
@@ -165,25 +170,14 @@ export default function WorldQuiz() {
     return (
         <section className={styles.quizSection} id="quiz">
             <div className={styles.container}>
-                <div className={styles.stepperContainer}>
-                    <div className={styles.stepperLabel}>
-                        {view === 'success' ? <span>Complete</span> : <span>Initiation</span>}
-                        <span>
-                            {view === 'quiz' ? `Step ${currentQuestionIndex + 1} of 5` :
-                                view === 'email' ? 'Step 6 of 7' :
-                                    view === 'artifact' ? 'Step 7 of 7' : 'Complete'}
-                        </span>
-                    </div>
-                    <div className={styles.progressBar}>
-                        <div
-                            className={styles.progressFill}
-                            style={{
-                                width: view === 'quiz' ? `${((currentQuestionIndex + 1) / 7) * 100}%` :
-                                    view === 'email' ? '85%' :
-                                        view === 'artifact' ? '95%' : '100%'
-                            }}
-                        ></div>
-                    </div>
+                <div className={styles.headerLogo}>
+                    <Image
+                        src={view === 'quiz' ? currentQuestion.logo : '/1_Quiz Planet Images/1_How empathetic are you_/1_logo.png'}
+                        alt="Question Logo"
+                        width={80}
+                        height={80}
+                        className={styles.headerLogoImage}
+                    />
                 </div>
 
                 {view === 'quiz' && (
@@ -212,17 +206,23 @@ export default function WorldQuiz() {
                         </div>
 
                         <div className={styles.sliderContainer}>
-                            <input
-                                type="range"
-                                min="0"
-                                max="100"
-                                step="1"
-                                value={sliderValue}
-                                onChange={(e) => setSliderValue(Number(e.target.value))}
-                                className={styles.slider}
-                                style={{ '--glow-color': currentQuestion.color } as React.CSSProperties}
-                                aria-label="Select your intensity"
-                            />
+                            <div className={styles.logoSliderWrapper}>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="100"
+                                    step="1"
+                                    value={sliderValue}
+                                    onChange={(e) => setSliderValue(Number(e.target.value))}
+                                    className={styles.logoSlider}
+                                    style={{
+                                        '--glow-color': currentQuestion.color,
+                                        '--thumb-image': `url('/Logo color.png')`
+                                    } as React.CSSProperties}
+                                    aria-label="Select your intensity"
+                                />
+                                <div className={styles.sliderTrackLine} />
+                            </div>
                         </div>
 
                         <button onClick={handleNext} className={styles.continueBtn}>

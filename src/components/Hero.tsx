@@ -4,6 +4,8 @@ import { useState, useCallback } from 'react';
 import styles from './Hero.module.css';
 import Carousel from './Carousel';
 
+import Image from 'next/image';
+
 const IMAGE_COLORS = [
     { start: '#0ea5e9', end: '#3b82f6' }, // Ocean: Light Blue -> Blue
     { start: '#d946ef', end: '#8b5cf6' }, // Creative: Pink -> Purple
@@ -35,6 +37,16 @@ export default function Hero() {
     return (
         <section className={styles.hero}>
             <div className={styles.container}>
+                <div className={styles.logo}>
+                    <Image
+                        src="/Logo color.png"
+                        alt="Planet 5 Logo"
+                        width={120}
+                        height={120}
+                        style={{ objectFit: 'contain' }}
+                        priority
+                    />
+                </div>
                 <h1 className={styles.title}>
                     Discover Your{' '}
                     <span
@@ -65,13 +77,6 @@ export default function Hero() {
                 <p className={styles.subtitle}>
                     A custom 3D printed masterpiece evolved from your unique Big 5 personality profile.
                 </p>
-
-                <div className={styles.scrollIndicator}>
-                    <div className={styles.mouse}>
-                        <div className={styles.wheel}></div>
-                    </div>
-                    <span>Scroll to explore</span>
-                </div>
             </div>
         </section>
     );

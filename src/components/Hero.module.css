@@ -51,6 +51,24 @@
     /* Space between elements */
 }
 
+.logo {
+    margin-bottom: 1rem;
+    filter: drop-shadow(0 0 20px rgba(79, 70, 229, 0.3));
+    animation: floatLogo 6s ease-in-out infinite;
+}
+
+@keyframes floatLogo {
+
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-10px);
+    }
+}
+
 .title {
     font-size: 2.5rem;
     /* Smaller for mobile */
@@ -222,68 +240,6 @@
 
     .subtitle {
         font-size: 1.25rem;
-    }
-}
-
-.scrollIndicator {
-    position: absolute;
-    bottom: 2rem;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.5rem;
-    opacity: 0;
-    animation: fadeIn 1s ease-out 2s forwards;
-    z-index: 10;
-    color: #a3a3a3;
-    font-size: 0.8rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    pointer-events: none;
-}
-
-.mouse {
-    width: 20px;
-    height: 35px;
-    border: 2px solid #a3a3a3;
-    border-radius: 10px;
-    position: relative;
-}
-
-.wheel {
-    width: 2px;
-    height: 6px;
-    background: #a3a3a3;
-    position: absolute;
-    top: 6px;
-    left: 50%;
-    transform: translateX(-50%);
-    animation: scrollWheel 2s infinite;
-}
-
-@keyframes scrollWheel {
-    0% {
-        opacity: 1;
-        transform: translateX(-50%) translateY(0);
-    }
-
-    100% {
-        opacity: 0;
-        transform: translateX(-50%) translateY(15px);
-    }
-}
-
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translate(-50%, 10px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translate(-50%, 0);
     }
 }
 
