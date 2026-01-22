@@ -30,7 +30,7 @@ export default function Hero() {
     const heroImages = [
         '/hero_landing_images/Comp_ChicaOceano.png',
         '/hero_landing_images/Comp_ChicoCreativo.png',
-        '/hero_landing_images/Comp_NiñoVolcan.png',
+        '/hero_landing_images/Comp_NinoVolcan.png',
         '/hero_landing_images/Gemini_Generated_Image_nq36hsnq36hsnq36.png'
     ];
 
