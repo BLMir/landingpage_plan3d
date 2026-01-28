@@ -6,9 +6,11 @@ interface PlanetCanvasProps {
     sliderValue: number;
     width: number;
     height: number;
+    tintColor?: string;
+    tintOpacity?: number;
 }
 
-export const PlanetCanvas: React.FC<PlanetCanvasProps> = ({ images, sliderValue, width, height }) => {
+export const PlanetCanvas: React.FC<PlanetCanvasProps> = ({ images, sliderValue, width, height, tintColor, tintOpacity }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
     useEffect(() => {
@@ -20,32 +22,44 @@ export const PlanetCanvas: React.FC<PlanetCanvasProps> = ({ images, sliderValue,
 
         // Clear canvas
         ctx.clearRect(0, 0, width, height);
+        ctx.globalCompositeOperation = 'source-over'; // Reset default
+        ctx.globalAlpha = 1;
 
         let imgToDraw: HTMLImageElement | null = null;
 
         if (sliderValue === 50) {
-            // Neutral state - use first frame of low (or whichever logic)
             imgToDraw = images.low[0];
         } else if (sliderValue < 50) {
-            // Low side: 50 -> 0 (indices 0 -> 19)
-            // 50 (neutral) -> index 0
-            // 0 (full low) -> index 19
             const index = Math.min(19, Math.floor(((50 - sliderValue) / 50) * 19));
             imgToDraw = images.low[index];
         } else {
-            // High side: 50 -> 100 (indices 0 -> 19)
-            // 50 (neutral) -> index 0
-            // 100 (full high) -> index 19
             const index = Math.min(19, Math.floor(((sliderValue - 50) / 50) * 19));
             imgToDraw = images.high[index];
         }
 
         if (imgToDraw && imgToDraw.complete) {
-            // Draw image scaled to canvas size
+            // 1. Draw the planet image
             ctx.drawImage(imgToDraw, 0, 0, width, height);
+
+            // 2. Apply tint if needed
+            if (tintColor && tintOpacity && tintOpacity > 0) {
+                // Save context state
+                ctx.save();
+
+                // Keep the opaque parts (source-atop means: draw new content only where existing content is opaque)
+                ctx.globalCompositeOperation = 'source-atop';
+                ctx.globalAlpha = tintOpacity;
+                ctx.fillStyle = tintColor;
+
+                // Fill the entire canvas with the tint color (it will be masked by the planet)
+                ctx.fillRect(0, 0, width, height);
+
+                // Restore context state
+                ctx.restore();
+            }
         }
 
-    }, [images, sliderValue, width, height]);
+    }, [images, sliderValue, width, height, tintColor, tintOpacity]);
 
     return (
         <canvas

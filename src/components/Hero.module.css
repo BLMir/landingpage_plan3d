@@ -51,27 +51,29 @@
     /* Space between elements */
 }
 
+
 .logo {
-    margin-bottom: 1rem;
+    margin-bottom: -5.5rem;
     filter: drop-shadow(0 0 20px rgba(79, 70, 229, 0.3));
-    animation: floatLogo 6s ease-in-out infinite;
+    position: relative;
+    z-index: 20;
+    /* Ensure on top if overlap */
 }
 
-@keyframes floatLogo {
-
-    0%,
-    100% {
-        transform: translateY(0);
+@media (max-width: 768px) {
+    .logo {
+        margin-bottom: -2rem;
+        /* Reduce overlap on mobile */
     }
 
-    50% {
-        transform: translateY(-10px);
+    .title {
+        font-size: 3rem;
+        /* Slightly smaller title for better fit */
     }
 }
 
 .title {
-    font-size: 2.5rem;
-    /* Smaller for mobile */
+    font-size: 3.5rem;
     line-height: 1.1;
     margin: 0;
     max-width: 800px;
@@ -93,9 +95,7 @@
 
 .gradientText {
     --gradient-start: #4f46e5;
-    /* Fallback/Initial */
     --gradient-end: #e11d48;
-    /* Fallback/Initial */
 
     background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
     -webkit-background-clip: text;
@@ -105,6 +105,8 @@
     transition: --gradient-start 1s ease, --gradient-end 1s ease;
 }
 
+/* ... (properties omitted for brevity) ... */
+
 .visual {
     position: relative;
     width: 280px;
@@ -113,21 +115,7 @@
     flex-shrink: 0;
     z-index: 10;
     border-radius: 50%;
-    animation: floating 6s ease-in-out infinite;
-}
-
-@keyframes floating {
-    0% {
-        transform: translateY(0px);
-    }
-
-    50% {
-        transform: translateY(-20px);
-    }
-
-    100% {
-        transform: translateY(0px);
-    }
+    /* Animation removed */
 }
 
 .visual::after {
@@ -138,27 +126,13 @@
     opacity: 0.3;
     filter: blur(20px);
     z-index: -1;
-    animation: pulseGlow 4s ease-in-out infinite;
     transition: background 1s ease;
-}
-
-@keyframes pulseGlow {
-
-    0%,
-    100% {
-        transform: scale(1);
-        opacity: 0.3;
-    }
-
-    50% {
-        transform: scale(1.1);
-        opacity: 0.5;
-    }
+    /* Pulse animation removed */
 }
 
 .ctaButton {
-    padding: 0.8rem 2.5rem;
-    font-size: 1.1rem;
+    padding: 1.2rem 3rem;
+    font-size: 1.5rem;
     font-weight: 700;
     color: black;
     background: white;
@@ -173,48 +147,7 @@
     overflow: hidden;
 }
 
-.ctaButton::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: -100%;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(90deg,
-            transparent,
-            rgba(255, 255, 255, 0.6),
-            transparent);
-    transition: none;
-    animation: shimmer 3s infinite;
-}
-
-@keyframes shimmer {
-    0% {
-        left: -100%;
-    }
-
-    20% {
-        left: 100%;
-    }
-
-    100% {
-        left: 100%;
-    }
-}
-
-.ctaButton:hover {
-    transform: scale(1.05);
-    box-shadow: 0 0 30px rgba(255, 255, 255, 0.4);
-}
-
-.subtitle {
-    font-size: 1rem;
-    color: #a3a3a3;
-    line-height: 1.4;
-    max-width: 600px;
-    margin: 0;
-    padding: 0 1rem;
-}
+/* ... (ctaButton::before / shimmer kept or removed? User said remove animation in initial screen that have both carrousel and logo... Shimmer is on button. I'll keep shimmer unless interpreted as "initial screen animations". User said "remove the animation... that have both the carrousel... and the logotype". I'll keep button shimmer for now as it makes it pop, unless told otherwise.) */
 
 /* Tablet and Desktop Adjustments */
 @media (min-width: 768px) {
@@ -223,7 +156,8 @@
     }
 
     .title {
-        font-size: 4rem;
+        font-size: 6rem;
+        /* Significantly bigger */
         margin-bottom: 0.5rem;
     }
 
@@ -234,8 +168,8 @@
     }
 
     .ctaButton {
-        padding: 1rem 3rem;
-        font-size: 1.2rem;
+        padding: 1.5rem 4rem;
+        font-size: 2rem;
     }
 
     .subtitle {
@@ -245,6 +179,80 @@
 
 @media (min-width: 1024px) {
     .title {
-        font-size: 5rem;
+        font-size: 8rem;
+        /* Huge */
+    }
+}
+
+/* Landscape / Short Viewport Optimizations (Broader support) */
+@media (max-height: 1000px) and (orientation: landscape) {
+    .hero {
+        padding: 0;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .container {
+        width: 100%;
+        height: 100%;
+        gap: 0px !important;
+        /* Minimized gap */
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        position: static;
+        text-align: center;
+    }
+
+    .logo {
+        display: flex !important;
+        justify-content: center !important;
+        width: 100% !important;
+        margin: 0 !important;
+        margin-bottom: 0px !important;
+        /* Zero gap */
+    }
+
+    .logo img {
+        width: 150px !important;
+        height: auto !important;
+        object-fit: contain;
+    }
+
+    /* TITLE: Stacked below logo */
+    .title {
+        position: static !important;
+        width: 100% !important;
+        text-align: center !important;
+        font-size: 3.5rem !important;
+        /* Slightly smaller to fit huge visual */
+        margin: 0 !important;
+        line-height: 1 !important;
+        margin-top: -10px !important;
+        /* Pull up closer to logo */
+    }
+
+    /* VISUAL: Centered */
+    .visual {
+        width: 450px !important;
+        /* CONSIDERABLY larger */
+        height: 450px !important;
+        margin: 0 auto !important;
+        margin-top: 10px !important;
+    }
+
+    .ctaButton {
+        padding: 1rem 3rem !important;
+        font-size: 1.5rem !important;
+        margin-top: 20px !important;
+        z-index: 20;
+    }
+
+    .subtitle {
+        display: none;
     }
 }

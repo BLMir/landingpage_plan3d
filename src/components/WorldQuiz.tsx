@@ -33,6 +33,14 @@ const glowColorMap: Record<string, GlowColors> = {
     'relaxed': { low: '#94A3B8', high: '#FFFFFF' },
 };
 
+const tintColorMap: Record<string, GlowColors> = {
+    'empathy': { low: '#D9851E', high: '#3B82F6' },
+    'sociable': { low: '#40E0D0', high: '#EF4444' }, // Turquoise to Red
+    'persistent': { low: '#C084FC', high: '#D9851E' },
+    'curious': { low: '#94A3B8', high: '#EAB308' },
+    'relaxed': { low: '#94A3B8', high: '#FFFFFF' },
+};
+
 const interpolateColor = (color1: string, color2: string, factor: number) => {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(color1);
     const result2 = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(color2);
@@ -111,6 +119,15 @@ const artifactOptions = [
     { id: 'artifact_6', label: 'Bracelet', format: 'Bracelet', image: '/artifact/Format_6.png', priceTiers: [15, 25, 35], subtitle: 'Get a 20% off!' },
 ];
 
+// Trait Data
+const traitMap: Record<string, Record<number, string>> = {
+    'empathy': { 0: 'Selfish', 15: 'Competitive', 35: 'Skeptical', 65: 'Trusting', 85: 'Cooperative', 100: 'Kind' },
+    'sociable': { 0: 'Reserved', 15: 'Solitary', 35: 'Withdrawn', 65: 'Outgoing', 85: 'Talkative', 100: 'Sociable' },
+    'persistent': { 0: 'Careless', 15: 'Unreliable', 35: 'Disorganized', 65: 'Organized', 85: 'Reliable', 100: 'Disciplined' },
+    'curious': { 0: 'Practical', 15: 'Routine-oriented', 35: 'Traditional', 65: 'Imaginative', 85: 'Adventurous', 100: 'Creative' },
+    'relaxed': { 0: 'Anxious', 15: 'Insecure', 35: 'Vulnerable', 65: 'Resilient', 85: 'Confident', 100: 'Calm' }
+};
+
 export default function WorldQuiz() {
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
     const [sliderValue, setSliderValue] = useState(50);
@@ -126,7 +143,7 @@ export default function WorldQuiz() {
     const [selectedPrices, setSelectedPrices] = useState<Record<string, number>>(
         Object.fromEntries(artifactOptions.map(opt => [opt.id, opt.priceTiers[0]]))
     );
-    const [wishlisted, setWishlisted] = useState<Set<string>>(new Set());
+    const [wishlisted, setWishlisted] = useState<Set<string>>(new Set(['artifact_1'])); // Digital saved by default
 
     const nextArtifact = () => {
         setCarouselIndex((prev) => (prev + 1) % artifactOptions.length);
@@ -140,11 +157,6 @@ export default function WorldQuiz() {
 
     const currentQuestion = questions[currentQuestionIndex];
     const { images, isLoading } = useImagePreloader(currentQuestion);
-
-    // Removed old currentImage memo logic
-
-
-
 
     // Idle timer logic
     useEffect(() => {
@@ -162,14 +174,13 @@ export default function WorldQuiz() {
         return () => {
             if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
         };
-    }, [sliderValue, currentQuestionIndex, idleTimerRef]); // Reset on these changes
+    }, [sliderValue, currentQuestionIndex, idleTimerRef]);
 
     const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setSliderValue(Number(e.target.value));
-        setShowIdleOverlay(false); // Hide overlay on interaction
+        setShowIdleOverlay(false);
         setHasInteracted(true);
 
-        // Reset timer on interaction
         if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
         idleTimerRef.current = setTimeout(() => {
             setShowIdleOverlay(true);
@@ -182,9 +193,9 @@ export default function WorldQuiz() {
 
         if (currentQuestionIndex < questions.length - 1) {
             setCurrentQuestionIndex(currentQuestionIndex + 1);
-            setSliderValue(50); // Reset slider for next question
-            setHasInteracted(false); // Reset interaction state for next question
-            setShowIdleOverlay(true); // Show overlay again for new question
+            setSliderValue(50);
+            setHasInteracted(false);
+            setShowIdleOverlay(false);
         } else {
             setView('email');
         }
@@ -232,18 +243,90 @@ export default function WorldQuiz() {
         return interpolateColor(colors.low, colors.high, sliderValue / 100);
     }, [currentQuestion.id, sliderValue, currentQuestion.color]);
 
+    const tintInfo = useMemo(() => {
+        const colors = tintColorMap[currentQuestion.id];
+        if (!colors) return { color: 'transparent', opacity: 0 };
+
+        const delta = Math.abs(sliderValue - 50);
+        let opacity = 0;
+        if (delta > 5) {
+            opacity = (delta / 25) * 0.3;
+        }
+
+        const isLow = sliderValue < 50;
+        return {
+            color: isLow ? colors.low : colors.high,
+            opacity: Math.min(0.6, opacity)
+        };
+    }, [currentQuestion.id, sliderValue]);
+
+    // Data for all traits of current question to render (and toggle visibility via CSS)
+    const allTraits = useMemo(() => {
+        const traits = traitMap[currentQuestion.id];
+        if (!traits) return [];
+        return [
+            { label: traits[0], posClass: styles['pos-0'], threshold: 5, type: 'low' },
+            { label: traits[15], posClass: styles['pos-15'], threshold: 15, type: 'low' },
+            { label: traits[35], posClass: styles['pos-35'], threshold: 35, type: 'low' },
+            { label: traits[65], posClass: styles['pos-65'], threshold: 65, type: 'high' },
+            { label: traits[85], posClass: styles['pos-85'], threshold: 85, type: 'high' },
+            { label: traits[100], posClass: styles['pos-100'], threshold: 95, type: 'high' },
+        ];
+    }, [currentQuestion.id]);
+
+    const getTraitVisibility = (threshold: number, type: string) => {
+        if (type === 'low') return sliderValue <= threshold && sliderValue < 50;
+        if (type === 'high') return sliderValue >= threshold && sliderValue > 50;
+        return false;
+    };
+
+    // Calculate active traits based on slider value
+    const activeTraits = useMemo(() => {
+        const traits = traitMap[currentQuestion.id];
+        if (!traits) return [];
+
+        const activeList: { label: string; posClass: string }[] = [];
+
+        // Low side (0-50%)
+        if (sliderValue < 50) {
+            if (sliderValue <= 35) activeList.push({ label: traits[35], posClass: styles['pos-35'] });
+            if (sliderValue <= 15) activeList.push({ label: traits[15], posClass: styles['pos-15'] });
+            if (sliderValue <= 5) activeList.push({ label: traits[0], posClass: styles['pos-0'] });
+        }
+
+        // High side (50-100%)
+        else if (sliderValue > 50) {
+            if (sliderValue >= 65) activeList.push({ label: traits[65], posClass: styles['pos-65'] });
+            if (sliderValue >= 85) activeList.push({ label: traits[85], posClass: styles['pos-85'] });
+            if (sliderValue >= 95) activeList.push({ label: traits[100], posClass: styles['pos-100'] });
+        }
+
+        return activeList;
+    }, [currentQuestion.id, sliderValue]);
+
     return (
         <section className={styles.quizSection} id="quiz">
             <div className={styles.container}>
-                <div className={styles.headerLogo}>
-                    <Image
-                        src={view === 'quiz' ? currentQuestion.logo : '/quiz_planet_images/1_How empathetic are you_/1_logo.png'}
-                        alt="Question Logo"
-                        width={80}
-                        height={80}
-                        className={styles.headerLogoImage}
-                    />
-                </div>
+                {view === 'quiz' ? (
+                    <div className={styles.progressContainer}>
+                        {questions.map((_, index) => (
+                            <div
+                                key={index}
+                                className={`${styles.progressLine} ${index <= currentQuestionIndex ? styles.active : ''}`}
+                            />
+                        ))}
+                    </div>
+                ) : (
+                    <div className={styles.headerLogo}>
+                        <Image
+                            src="/bg_web_elements/logo.png"
+                            alt="Logo"
+                            width={200}
+                            height={200}
+                            className={styles.headerLogoImage}
+                        />
+                    </div>
+                )}
 
                 {view === 'quiz' && (
                     <>
@@ -254,6 +337,17 @@ export default function WorldQuiz() {
                             style={{ '--glow-color': currentGlowColor } as React.CSSProperties}
                         >
                             <div className={styles.planetVisual}>
+                                {allTraits.map((trait, idx) => {
+                                    const isVisible = getTraitVisibility(trait.threshold, trait.type);
+                                    return (
+                                        <div
+                                            key={`${trait.label}-${idx}`}
+                                            className={`${styles.planetLabel} ${isVisible ? styles.visible : ''} ${trait.posClass}`}
+                                        >
+                                            {trait.label}
+                                        </div>
+                                    );
+                                })}
                                 <div
                                     className={`${styles.planetImageWrapper} ${styles.active}`}
                                     style={{ '--glow-color': currentGlowColor } as React.CSSProperties}
@@ -268,13 +362,14 @@ export default function WorldQuiz() {
                                             sliderValue={sliderValue}
                                             width={500}
                                             height={500}
+                                            tintColor={tintInfo.color}
+                                            tintOpacity={tintInfo.opacity}
                                         />
                                     )}
                                 </div>
                             </div>
                         </div>
 
-                        {/* Middle Content Overlay (Idle or Feedback) */}
                         <div className={styles.overlayContainer}>
                             {showIdleOverlay ? (
                                 <div className={styles.idleOverlay}>
@@ -305,11 +400,11 @@ export default function WorldQuiz() {
                                     className={styles.logoSlider}
                                     style={{
                                         '--glow-color': currentGlowColor,
+                                        '--thumb-image': `url('/Logo color.png')`
                                     } as React.CSSProperties}
                                     aria-label="Select your intensity"
                                 />
                                 <div className={styles.sliderTrackLine} />
-                                {/* Custom Thumb Overlay */}
                                 <div
                                     className={styles.customThumb}
                                     style={{
@@ -330,16 +425,16 @@ export default function WorldQuiz() {
                                 filter: hasInteracted ? 'none' : 'grayscale(0.5)'
                             }}
                         >
-                            {currentQuestionIndex === questions.length - 1 ? 'Finish Essence' : 'Next Question'}
+                            {currentQuestionIndex === questions.length - 1 ? 'Finish' : 'Next Question'}
                         </button>
                     </>
                 )}
 
                 {view === 'email' && (
                     <div className={styles.emailForm}>
-                        <h2 className={styles.questionTitle}>Save your Essence</h2>
-                        <p className={styles.emailSubtext}>
-                            Enter your contact to proceed to artifact selection.
+                        <h2 className={styles.questionTitle}>Save your planet!</h2>
+                        <p className={styles.emailSubtext} style={{ whiteSpace: 'pre-line' }}>
+                            We’ll let you know{'\n'}when it’s ready!
                         </p>
 
                         <form onSubmit={handleEmailSubmit} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center' }}>
@@ -357,16 +452,16 @@ export default function WorldQuiz() {
                                 className={styles.continueBtn}
                                 style={{ marginTop: '0.5rem' }}
                             >
-                                Continue
+                                Save your planet
                             </button>
                         </form>
                     </div>
                 )}
 
                 {view === 'artifact' && (
-                    <div className={styles.emailForm}>
-                        <h2 className={styles.questionTitle}>Thanks!</h2>
-                        <p className={styles.emailSubtext}>
+                    <div className={styles.emailForm} style={{ maxWidth: '800px' }}>
+                        <h2 className={styles.questionTitle} style={{ fontSize: '2rem' }}>Save your planet!</h2>
+                        <p className={styles.emailSubtext} style={{ whiteSpace: 'pre-line', marginBottom: '0.5rem' }}>
                             In which format would you like your planet?
                         </p>
 
@@ -383,6 +478,7 @@ export default function WorldQuiz() {
 
                                     const isActive = idx === carouselIndex;
                                     const isSaved = wishlisted.has(artifact.id);
+                                    const isDigital = artifact.id === 'artifact_1';
 
                                     return (
                                         <div
@@ -408,12 +504,14 @@ export default function WorldQuiz() {
                                                 />
                                             </div>
 
-                                            <h3 className={styles.artifactFormatTitle}>{artifact.format}</h3>
+                                            <h3 className={styles.artifactFormatTitle}>{isDigital ? 'Digital (free)' : artifact.format}</h3>
 
                                             <button
                                                 className={`${styles.wishlistBtn} ${isSaved ? styles.saved : ''}`}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
+                                                    // Allow toggling even for digital if user wants, or we can enforce keep-saved.
+                                                    // User said "already being clicked and say Saved". Keeping toggle logic for flexibility but default is Checked.
                                                     setWishlisted(prev => {
                                                         const next = new Set(prev);
                                                         if (next.has(artifact.id)) next.delete(artifact.id);
@@ -425,22 +523,35 @@ export default function WorldQuiz() {
                                                 {isSaved ? '✓ Saved' : 'Wishlist +'}
                                             </button>
 
-                                            <p className={styles.promoText}>{artifact.subtitle}</p>
+                                            {isSaved ? (
+                                                <div className={styles.priceContainer}>
+                                                    <p className={styles.promoText} style={{ color: 'white' }}>
+                                                        {isDigital
+                                                            ? "We’ll always send you your digital planet + the results of your personality test"
+                                                            : "How would you value this handmade product?"
+                                                        }
+                                                    </p>
+                                                    <div className={styles.pricePillsContainer}>
+                                                        {artifact.priceTiers.map((price) => (
+                                                            <button
+                                                                key={price}
+                                                                className={`${styles.pricePill} ${selectedPrices[artifact.id] === price ? styles.activePill : ''}`}
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setSelectedPrices(prev => ({ ...prev, [artifact.id]: price }));
+                                                                }}
+                                                            >
+                                                                {price === 0 ? 'Free' : `${price}€`}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <p className={styles.promoText} style={{ color: 'white', fontSize: '1rem', marginTop: '1rem' }}>
+                                                    Save it to your wishlist and get a 20% off when ready!
+                                                </p>
+                                            )}
 
-                                            <div className={styles.pricePillsContainer}>
-                                                {artifact.priceTiers.map((price) => (
-                                                    <button
-                                                        key={price}
-                                                        className={`${styles.pricePill} ${selectedPrices[artifact.id] === price ? styles.activePill : ''}`}
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setSelectedPrices(prev => ({ ...prev, [artifact.id]: price }));
-                                                        }}
-                                                    >
-                                                        {price === 0 ? 'Free' : `${price}€`}
-                                                    </button>
-                                                ))}
-                                            </div>
                                         </div>
                                     );
                                 })}

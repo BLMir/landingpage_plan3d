@@ -97,6 +97,8 @@
     margin-bottom: 2rem;
     position: relative;
     /* Removed filter transition from container, will apply per image */
+    animation: float 8s ease-in-out infinite;
+    /* Moving float here */
 }
 
 .planetImageWrapper {
@@ -116,7 +118,7 @@
     opacity: 1;
     transform: scale(1);
     z-index: 5;
-    animation: float 8s ease-in-out infinite;
+    /* animation: float removed from here, moving to container */
 }
 
 .planetIcon {
@@ -136,13 +138,207 @@
 .optionDesc {
     font-size: 1.1rem;
     color: #cbd5e1;
-    max-width: 80%;
 }
 
+/* Planet Labels */
+.planetLabel {
+    position: absolute;
+    color: white;
+    font-size: 1.5rem;
+    /* Increased size */
+    font-weight: 700;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.4);
+    padding: 4px 8px;
+    border-radius: 8px;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+    pointer-events: none;
+    white-space: nowrap;
+    z-index: 10;
+}
+
+.planetLabel.visible {
+    opacity: 1;
+}
+
+.planetLabel::after {
+    content: '';
+    position: absolute;
+    background: rgba(255, 255, 255, 0.4);
+    z-index: -1;
+    width: 0;
+    /* Star with 0 width for animation */
+    transition: width 0.5s ease-out;
+    /* Animate expansion */
+}
+
+/* Ensure line expands when visible */
+.planetLabel.visible::after {
+    transition-delay: 0.1s;
+    /* Slight delay after text fade in */
+}
+
+/* Position mapping classes */
+.pos-0 {
+    top: 10%;
+    left: -10%;
+    /* Closer */
+}
+
+.pos-0::after {
+    top: 50%;
+    left: 100%;
+    /* Width defined by visibility state logic override or max-width? 
+       Actually, I will set the target width in the specific modifier when visible.
+    */
+    height: 2px;
+    /* Increased stroke */
+    transform: rotate(15deg);
+    transform-origin: left;
+}
+
+.planetLabel.visible.pos-0::after {
+    width: 30px;
+    /* Shortened line */
+}
+
+.pos-15 {
+    top: 40%;
+    left: -12%;
+    /* Closer */
+}
+
+.pos-15::after {
+    top: 50%;
+    left: 100%;
+    height: 2px;
+    /* Increased stroke */
+    transform: rotate(0deg);
+}
+
+.planetLabel.visible.pos-15::after {
+    width: 40px;
+    /* Shortened line */
+}
+
+.pos-35 {
+    bottom: 10%;
+    left: -10%;
+    /* Closer */
+}
+
+.pos-35::after {
+    top: 50%;
+    left: 100%;
+    height: 2px;
+    /* Increased stroke */
+    transform: rotate(-15deg);
+    transform-origin: left;
+}
+
+.planetLabel.visible.pos-35::after {
+    width: 30px;
+    /* Shortened line */
+}
+
+.pos-65 {
+    bottom: 10%;
+    right: -10%;
+    /* Closer */
+}
+
+.pos-65::after {
+    top: 50%;
+    right: 100%;
+    height: 2px;
+    /* Increased stroke */
+    transform: rotate(15deg);
+    transform-origin: right;
+}
+
+.planetLabel.visible.pos-65::after {
+    width: 30px;
+    /* Shortened line */
+}
+
+.pos-85 {
+    top: 40%;
+    right: -12%;
+    /* Closer */
+}
+
+.pos-85::after {
+    top: 50%;
+    right: 100%;
+    height: 2px;
+    /* Increased stroke */
+    transform: rotate(0deg);
+}
+
+.planetLabel.visible.pos-85::after {
+    width: 40px;
+    /* Shortened line */
+}
+
+.pos-100 {
+    top: 10%;
+    right: -10%;
+    /* Closer */
+}
+
+.pos-100::after {
+    top: 50%;
+    right: 100%;
+    height: 2px;
+    /* Increased stroke */
+    transform: rotate(-15deg);
+    transform-origin: right;
+}
+
+.planetLabel.visible.pos-100::after {
+    width: 30px;
+    /* Shortened line */
+}
+
+@media (max-width: 600px) {
+    .planetLabel {
+        font-size: 1rem;
+        /* Smaller than desktop but readable */
+        padding: 2px 6px;
+    }
+
+    .pos-0 {
+        left: -5%;
+    }
+
+    .pos-15 {
+        left: -8%;
+    }
+
+    .pos-35 {
+        left: -5%;
+    }
+
+    .pos-65 {
+        right: -5%;
+    }
+
+    .pos-85 {
+        right: -8%;
+    }
+
+    .pos-100 {
+        right: -5%;
+    }
+}
+
+
 .headerLogo {
-    width: 80px;
-    height: 80px;
-    margin-bottom: 1rem;
+    width: 200px;
+    height: 200px;
+    margin-bottom: -3rem;
+    /* Pull title closer */
     position: relative;
     display: flex;
     justify-content: center;
@@ -152,6 +348,8 @@
 .headerLogoImage {
     object-fit: contain;
     filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.5));
+    width: 100%;
+    height: 100%;
 }
 
 .logoSliderWrapper {
@@ -166,12 +364,38 @@
     justify-content: center;
 }
 
+.progressContainer {
+    width: 100%;
+    display: flex;
+    gap: 8px;
+    margin-bottom: 2rem;
+    padding: 0 1rem;
+    max-width: 400px;
+    /* Keep it controlled */
+}
+
+.progressLine {
+    flex: 1;
+    height: 4px;
+    background-color: white;
+    opacity: 0.3;
+    border-radius: 2px;
+    transition: opacity 0.5s ease;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+}
+
+.progressLine.active {
+    opacity: 1;
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.4);
+}
+
 .sliderTrackLine {
     position: absolute;
     width: 100%;
     height: 18px;
     background: url('/bg_web_elements/bg_slider .png') no-repeat center center;
-    background-size: 100% 100%;
+    background-size: 100% 115%;
+    /* Increased height */
     top: 50%;
     transform: translateY(-50%);
     z-index: 1;
@@ -339,8 +563,10 @@
 .emailSubtext {
     color: #cbd5e1;
     text-align: center;
-    font-size: 0.95rem;
+    font-size: 1.2rem;
     margin-top: -0.5rem;
+    margin-bottom: 0.5rem;
+    /* Reduced bottom margin */
 }
 
 /* Artifact Carousel Styles */
@@ -357,8 +583,8 @@
 
 .carouselTrack {
     position: relative;
-    width: 350px;
-    height: 550px;
+    width: 450px;
+    height: 650px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -367,8 +593,8 @@
 
 .carouselItem {
     position: absolute;
-    width: 300px;
-    height: 500px;
+    width: 400px;
+    height: 600px;
     background: transparent;
     border: none;
     border-radius: 32px;
@@ -376,7 +602,9 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: flex-end;
+    justify-content: flex-start;
+    padding-top: 360px;
+    /* Push content down below image */
     cursor: pointer;
     transition: all 0.7s cubic-bezier(0.4, 0, 0.2, 1);
     overflow: hidden;
@@ -399,11 +627,13 @@
     position: absolute;
     inset: 0;
     background: linear-gradient(to bottom,
-            rgba(15, 23, 42, 0.1) 0%,
-            rgba(15, 23, 42, 0.4) 50%,
-            rgba(15, 23, 42, 0.85) 100%);
+            rgba(15, 23, 42, 0) 0%,
+            rgba(15, 23, 42, 0.2) 60%,
+            rgba(15, 23, 42, 0.8) 100%);
     z-index: 1;
 }
+
+
 
 .artifactMainImage {
     object-fit: cover;
@@ -448,13 +678,25 @@
     box-shadow: none;
 }
 
+.priceContainer {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    animation: fadeIn 0.3s ease-out;
+}
+
 .promoText {
     position: relative;
     z-index: 2;
-    font-size: 0.85rem;
-    color: #818cf8;
-    margin-bottom: 1.5rem;
+    font-size: 0.95rem;
+    /* Increased size */
+    color: white;
+    margin-bottom: 1rem;
     font-weight: 600;
+    text-align: center;
+    line-height: 1.4;
 }
 
 .pricePillsContainer {
@@ -464,7 +706,7 @@
     gap: 0.5rem;
     width: 100%;
     justify-content: center;
-    padding-top: 1.25rem;
+    padding-top: 0.5rem;
     border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
@@ -551,6 +793,10 @@
         width: 220px;
         height: 450px;
         padding: 1.5rem;
+        padding-top: 200px;
+        /* Adjusted to middle ground: Title at image start, Button at colored bg start */
+        justify-content: flex-start;
+        /* Ensure items start from top */
     }
 
     .navBtn {
@@ -701,5 +947,161 @@
     justify-content: center;
     align-items: center;
     pointer-events: none;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    pointer-events: none;
     z-index: 20;
+}
+
+/* Landscape / Short Viewport Optimizations (Mobile Landscape) */
+/* Landscape / Short Viewport Optimizations (Broader support) */
+/* Landscape / Short Viewport Optimizations (Huge Planet, Stacked Layout) */
+@media (max-height: 1000px) and (orientation: landscape) {
+    .quizSection {
+        padding: 0 !important;
+        height: 100vh;
+        min-height: 100vh;
+        /* Allow scroll if absolutely needed, but aim for fit */
+        overflow-y: auto !important;
+        /* Allow scroll if content overflows */
+        overflow-x: hidden !important;
+        position: relative;
+    }
+
+    .container {
+        width: 100%;
+        min-height: 100%;
+        max-width: 100%;
+        margin: 0;
+        padding: 10px 0;
+        /* Add vertical padding */
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        /* Pack to center */
+        align-items: center;
+        gap: 0;
+        position: static;
+    }
+
+    /* 1. TOP: Progress Bar */
+    .progressContainer {
+        position: static !important;
+        width: 60% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        order: 1;
+        flex-shrink: 0;
+    }
+
+    /* 2. TOP: Title (Larger) */
+    .questionTitle {
+        position: static !important;
+        width: 100% !important;
+        text-align: center !important;
+        font-size: 2rem !important;
+        /* Increased from 1.5rem */
+        margin: 0 !important;
+        margin-top: 5px !important;
+        line-height: 1.1 !important;
+        order: 2;
+        z-index: 20;
+        flex-shrink: 0;
+    }
+
+    /* 3. CENTER: Planet (Huge but not pushing) */
+    .activeOptionDisplay {
+        position: static !important;
+        transform: none !important;
+        margin: 0 !important;
+        flex-grow: 0 !important;
+        /* Don't push slider away */
+        width: 100% !important;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        order: 3;
+        z-index: 10;
+        margin-top: 0 !important;
+        margin-bottom: 0 !important;
+        /* Tight to slider */
+    }
+
+    .planetVisual {
+        width: 55vh !important;
+        /* Slightly reduced to fit title increase */
+        height: 55vh !important;
+        max-width: none !important;
+        max-height: none !important;
+        margin: 0 !important;
+    }
+
+    /* 4. OVERLAY: Above Slider (Close) */
+    .overlayContainer {
+        position: static !important;
+        transform: none !important;
+        width: 100% !important;
+        height: auto !important;
+        pointer-events: none;
+        z-index: 25;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        order: 4;
+        margin-top: 0 !important;
+        /* Close to planet */
+        margin-bottom: 2px !important;
+        /* Close to slider */
+    }
+
+    /* 5. SLIDER: Compact */
+    .sliderContainer {
+        position: static !important;
+        width: 60% !important;
+        margin: 1rem 0 !important;
+        z-index: 30;
+        order: 5;
+        flex-shrink: 0;
+    }
+
+    .logoSliderWrapper {
+        width: 100% !important;
+        margin-left: 0 !important;
+        height: 30px !important;
+        margin: 0 !important;
+        display: flex !important;
+        align-items: center !important;
+    }
+
+    /* Fix Slider Track Stretching */
+    .sliderTrackLine {
+        height: 12px !important;
+        /* Thinner */
+        background-size: 100% 100% !important;
+        /* Don't stretch height excessively */
+        top: 50% !important;
+        transform: translateY(-50%) !important;
+    }
+
+    /* 6. BUTTON: Bottom with details */
+    .continueBtn {
+        position: static !important;
+        margin: 0 !important;
+        margin-top: 40px !important;
+        margin-bottom: 60px !important;
+        /* Increased bottom spacing */
+        z-index: 30;
+        width: auto !important;
+        padding: 0.6rem 2rem !important;
+        order: 6;
+        flex-shrink: 0;
+    }
+
+    .planetLabel {
+        font-size: 0.9rem !important;
+    }
+
+    .headerLogo,
+    .headerLogo+.questionTitle+.continueBtn {}
 }

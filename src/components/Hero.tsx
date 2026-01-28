@@ -39,10 +39,10 @@ export default function Hero() {
             <div className={styles.container}>
                 <div className={styles.logo}>
                     <Image
-                        src="/Logo color.png"
+                        src="/bg_web_elements/logo.png"
                         alt="Planet 5 Logo"
-                        width={120}
-                        height={120}
+                        width={200}
+                        height={200}
                         style={{ objectFit: 'contain' }}
                         priority
                     />
