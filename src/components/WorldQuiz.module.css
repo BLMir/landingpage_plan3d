@@ -1,14 +1,65 @@
 .quizSection {
     position: relative;
     padding: 6rem 1rem;
-    min-height: 80vh;
+    min-height: 100vh;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     background: radial-gradient(circle at center, rgba(46, 16, 101, 0.4) 0%, rgba(15, 23, 42, 0.2) 100%);
-    overflow: hidden;
+    overflow-x: hidden;
     color: white;
+}
+
+/* Initial Loader Styles */
+.initialLoaderOverlay,
+.planetLoaderOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: #0a0a0a;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+}
+
+.planetLoaderOverlay {
+    background: rgba(10, 10, 10, 0.8);
+}
+
+.loaderContent {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.circularLoader {
+    transform: rotate(-90deg);
+}
+
+.loaderTrack {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.1);
+    stroke-width: 4;
+}
+
+.loaderProgress {
+    fill: none;
+    stroke: white;
+    stroke-width: 4;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.1s linear;
+}
+
+.loaderPercentage {
+    position: absolute;
+    color: white;
+    font-size: 1.5rem;
+    font-weight: 700;
 }
 
 /* Stars background effect */
@@ -74,7 +125,9 @@
     font-size: 2.5rem;
     text-align: center;
     margin-bottom: 2rem;
-    font-weight: 700;
+    font-weight: 400;
+    /* Changed from 700 to Regular */
+    order: 2;
 }
 
 .activeOptionDisplay {
@@ -111,7 +164,7 @@
     opacity: 0;
     transform: scale(0.85);
     pointer-events: none;
-    filter: drop-shadow(0 0 50px var(--glow-color, rgba(99, 102, 241, 0.3)));
+    filter: drop-shadow(0 0 30px var(--glow-color, rgba(99, 102, 241, 0.3)));
 }
 
 .planetImageWrapper.active {
@@ -133,6 +186,30 @@
     margin-bottom: 0.5rem;
     color: var(--glow-color, white);
     transition: color 0.3s ease;
+}
+
+.questionTitle {
+    font-size: 2.2rem;
+    font-weight: 400;
+    margin-bottom: 1.5rem;
+    color: white;
+    text-align: center;
+    max-width: 800px;
+    line-height: 1.25;
+    z-index: 10;
+    /* Limit to 2 lines */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    height: 3.125em;
+    /* Exactly 2 lines (1.25 * 2 + a tiny bit) */
+    transition: opacity 0.4s ease;
+}
+
+.questionTitleFading {
+    opacity: 0;
 }
 
 .optionDesc {
@@ -368,9 +445,12 @@
     width: 100%;
     display: flex;
     gap: 8px;
+    margin-top: 2rem;
+    /* Added margin for Portrait - "less air" between nav and title if title is below */
     margin-bottom: 2rem;
     padding: 0 1rem;
     max-width: 400px;
+    order: 1;
     /* Keep it controlled */
 }
 
@@ -393,7 +473,7 @@
     position: absolute;
     width: 100%;
     height: 18px;
-    background: url('/bg_web_elements/bg_slider .png') no-repeat center center;
+    background: url('/yourplan3d/bg_web_elements/bg_slider.png') no-repeat center center;
     background-size: 100% 115%;
     /* Increased height */
     top: 50%;
@@ -449,6 +529,7 @@
     box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4);
     letter-spacing: 0.05em;
     text-transform: uppercase;
+    order: 6;
 }
 
 .continueBtn:hover {
@@ -480,22 +561,25 @@
     }
 
     .container {
-        gap: 1rem;
-        /* Reduced gap */
+        gap: 0.3rem;
         height: 100%;
-        justify-content: space-evenly;
+        justify-content: flex-start;
+        /* Changed from center/space-evenly to pull up */
+        padding-top: 0.5rem;
     }
 
     .questionTitle {
-        font-size: 1.5rem;
-        /* Smaller title */
+        font-size: 1.4rem;
+        margin-top: 0.5rem;
         margin-bottom: 0.5rem;
     }
 
     .activeOptionDisplay {
+        margin-top: 2rem;
+        /* Reduced from 5rem to pull content up */
         margin-bottom: 0.5rem;
-        flex-grow: 1;
-        justify-content: center;
+        flex-grow: 0;
+        justify-content: flex-start;
     }
 
     .planetVisual {
@@ -518,23 +602,47 @@
 
     .sliderContainer {
         margin-bottom: 1rem;
+        width: 100%;
+        max-width: 400px;
+        order: 5;
     }
 
     .continueBtn {
         margin-top: 0;
         padding: 0.8rem 3rem;
         margin-bottom: 1rem;
-        /* Add some bottom spacing */
     }
 }
 
 .emailForm {
     width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
+    animation: fadeIn 0.5s ease-out;
+    position: relative;
+    z-index: 20;
+    padding: 2rem 0;
+}
+
+.emailHeader {
+    width: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 1.5rem;
-    animation: fadeIn 0.5s ease-out;
+    gap: 0.5rem;
+}
+
+.emailBottom {
+    width: 100%;
+    max-width: 400px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.2rem;
+    margin-top: auto;
 }
 
 .emailInput {
@@ -548,6 +656,76 @@
     outline: none;
     transition: all 0.3s ease;
     text-align: center;
+}
+
+/* Global Planet Layout */
+.globalPlanetContainer {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 5;
+    order: 3;
+    position: relative;
+}
+
+.globalPlanetContainer::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(70vw, 400px);
+    /* Moderated size */
+    height: min(70vw, 400px);
+    background: radial-gradient(circle, var(--glow-color, rgba(99, 102, 241, 0.4)) 0%, transparent 60%);
+    /* Moderated spread */
+    opacity: 0.6;
+    /* Moderated opacity */
+    filter: blur(40px);
+    /* Moderated blur radius */
+    z-index: -1;
+    pointer-events: none;
+    transition: background 1s ease;
+}
+
+.globalPlanetHidden {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+    transform: scale(0.8) translateY(20px);
+}
+
+.globalPlanetVisible {
+    position: relative;
+    opacity: 1;
+    transform: scale(1) translateY(0);
+}
+
+.globalPlanetBlurred {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(1.1);
+    filter: blur(20px) brightness(0.6);
+    opacity: 0.8;
+    pointer-events: none;
+}
+
+.emailSymbolOverlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    z-index: 10;
+    opacity: 0.8;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
 }
 
 .emailInput:focus {
@@ -566,7 +744,40 @@
     font-size: 1.2rem;
     margin-top: -0.5rem;
     margin-bottom: 0.5rem;
-    /* Reduced bottom margin */
+}
+
+.secondaryDownloadBtn {
+    background: transparent;
+    border: 1.5px solid rgba(255, 255, 255, 0.3);
+    color: rgba(255, 255, 255, 0.8);
+    padding: 0.8rem 2rem;
+    border-radius: 50px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.secondaryDownloadBtn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 1);
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+
+.secondaryDownloadBtn svg {
+    opacity: 0.7;
+    transition: opacity 0.3s ease;
+}
+
+.secondaryDownloadBtn:hover svg {
+    opacity: 1;
 }
 
 /* Artifact Carousel Styles */
@@ -777,6 +988,18 @@
     }
 }
 
+@keyframes fadeInEaseOut {
+    0% {
+        opacity: 0;
+        transform: translateY(5px);
+    }
+
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 /* Mobile adjustments */
 @media (max-width: 600px) {
     .carouselContainer {
@@ -938,19 +1161,13 @@
 }
 
 .overlayContainer {
-    position: absolute;
-    bottom: 160px;
-    left: 0;
     width: 100%;
-    height: 60px;
     display: flex;
     justify-content: center;
     align-items: center;
     pointer-events: none;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    pointer-events: none;
+    order: 4;
+    min-height: 40px;
     z-index: 20;
 }
 
@@ -974,12 +1191,12 @@
         min-height: 100%;
         max-width: 100%;
         margin: 0;
-        padding: 10px 0;
-        /* Add vertical padding */
+        padding: 5px 0;
+        /* Reduced */
         display: flex;
         flex-direction: column;
-        justify-content: center;
-        /* Pack to center */
+        justify-content: flex-start;
+        /* Changed from center to pull up */
         align-items: center;
         gap: 0;
         position: static;
@@ -988,8 +1205,12 @@
     /* 1. TOP: Progress Bar */
     .progressContainer {
         position: static !important;
-        width: 60% !important;
+        width: 85% !important;
         margin: 0 !important;
+        margin-top: 0.5rem !important;
+        /* Reduced from 2rem */
+        margin-bottom: 1rem !important;
+        /* Reduced from 2rem */
         padding: 0 !important;
         order: 1;
         flex-shrink: 0;
@@ -1000,14 +1221,16 @@
         position: static !important;
         width: 100% !important;
         text-align: center !important;
-        font-size: 2rem !important;
-        /* Increased from 1.5rem */
+        font-size: 1.8rem !important;
         margin: 0 !important;
-        margin-top: 5px !important;
+        margin-top: 1rem !important;
+        /* Pushed down */
         line-height: 1.1 !important;
         order: 2;
         z-index: 20;
         flex-shrink: 0;
+        font-weight: 400 !important;
+        /* Force regular in landscape too */
     }
 
     /* 3. CENTER: Planet (Huge but not pushing) */
@@ -1016,22 +1239,21 @@
         transform: none !important;
         margin: 0 !important;
         flex-grow: 0 !important;
-        /* Don't push slider away */
         width: 100% !important;
         display: flex;
         justify-content: center;
         align-items: center;
         order: 3;
         z-index: 10;
-        margin-top: 0 !important;
+        margin-top: 2rem !important;
+        /* Reduced from 10rem to pull content up */
         margin-bottom: 0 !important;
-        /* Tight to slider */
     }
 
     .planetVisual {
-        width: 55vh !important;
-        /* Slightly reduced to fit title increase */
-        height: 55vh !important;
+        width: 50vh !important;
+        /* Further reduced to ensure it fits without resize */
+        height: 50vh !important;
         max-width: none !important;
         max-height: none !important;
         margin: 0 !important;
@@ -1102,6 +1324,901 @@
         font-size: 0.9rem !important;
     }
 
-    .headerLogo,
-    .headerLogo+.questionTitle+.continueBtn {}
+
+}
+
+
+/* Trait Selection Specific Styles */
+.planetLoaderPlaceholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+.traitSelectionContainer {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4rem;
+    /* Reduced from 0.8rem */
+    animation: fadeIn 0.5s ease-out;
+    order: 1;
+}
+
+.selectionTextContainer {
+    min-height: 0;
+    /* Collapsed when empty */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+}
+
+.traitTitle {
+    font-size: 1.4rem;
+    font-weight: 500;
+    color: #cbd5e1;
+    text-align: center;
+    margin-bottom: 0.1rem;
+}
+
+.traitSubtitle {
+    font-size: 2.2rem;
+    font-weight: 800;
+    color: white;
+    text-align: center;
+    margin-bottom: 0.1rem;
+    animation: fadeInEaseOut 0.6s ease-out;
+}
+
+.previewGrid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+    /* Two rows: Images, then Title/Text */
+    gap: 0.25rem;
+    /* Reduced from 0.5rem */
+    margin-bottom: 2px;
+    /* Reduced from 5px */
+    height: auto;
+    min-height: 280px;
+    /* Reduced from 350px */
+    width: 100%;
+    max-width: 800px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 24px;
+    padding: 0.4rem 1rem 0.8rem 1rem;
+    /* Tight top padding, comfortable sides/bottom */
+    animation: fadeInEaseOut 0.6s ease-out;
+    align-items: center;
+}
+
+/* .placeholderBox removed - flattened structure */
+
+.placeholderImageReplacement {
+    width: 160px;
+    /* Reduced from 180px */
+    height: 160px;
+    /* Reduced from 180px */
+}
+
+.placeholderText {
+    grid-column: 1 / -1;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 1.2rem;
+    /* Reduced from 1.4rem */
+    font-weight: 500;
+    font-style: italic;
+    max-width: 500px;
+    line-height: 1.4;
+    text-align: center;
+    margin: 0.8rem auto;
+    /* Adjusted from 0.5rem */
+    justify-self: center;
+    transition: opacity 0.5s ease, transform 0.5s ease;
+}
+
+.instructionHidden {
+    opacity: 0 !important;
+    transform: translateY(5px);
+    pointer-events: none;
+}
+
+.lowHighLabel {
+    font-size: 1rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.5);
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+.lowHighLabelContainer {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    height: 1.5rem;
+}
+
+.logicIcon {
+    opacity: 0.5;
+    object-fit: contain;
+}
+
+.previewImageWrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    /* Reduced from 0.5rem */
+}
+
+.previewImage {
+    object-fit: contain;
+    width: 160px !important;
+    /* Reduced from 180px */
+    height: 160px !important;
+    /* Reduced from 180px */
+    filter: drop-shadow(0 0 25px rgba(255, 255, 255, 0.15));
+}
+
+.selectionArea {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.1rem;
+    /* Reduced to nearly zero */
+}
+
+/* .groupSelectionImageWrapper and .groupSelectionImage removed */
+
+.elementGroupTextContainer {
+    grid-column: 1 / -1;
+    /* Span full width to center */
+    display: flex;
+    justify-content: center;
+    width: 100%;
+}
+
+.elementGroupText {
+    font-size: 1rem;
+    /* Reduced from 1.1rem */
+    font-weight: 600;
+    color: white;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 0.3rem 1.2rem;
+    /* Reduced from 0.6rem 1.8rem */
+    border-radius: 100px;
+}
+
+.elementButtons {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.elementBtn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    padding: 0;
+    /* Remove padding to maximize hit area of the whole box */
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    width: 90px;
+    /* Reduced from 110px */
+    height: 90px;
+    /* Reduced from 110px */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: visible;
+    /* Ensure icon shadow is visible */
+}
+
+.elementBtn:hover:not(.elementBtnDisabled) {
+    background: rgba(255, 255, 255, 0.12);
+    transform: translateY(-5px);
+    border-color: #6366f1;
+}
+
+.elementBtnSelected {
+    background: rgba(99, 102, 241, 0.2);
+    border-color: #6366f1;
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.3);
+}
+
+.elementBtnDisabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+    filter: grayscale(1);
+}
+
+.elementIcon {
+    width: 100% !important;
+    /* Take full width of button */
+    height: 100% !important;
+    /* Take full height of button */
+    object-fit: contain;
+    pointer-events: none;
+    /* Pointer events will be handled by the button */
+}
+
+.checkMark {
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    background: #6366f1;
+    color: white;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    font-weight: 900;
+    box-shadow: 0 0 15px rgba(192, 132, 252, 0.6);
+    z-index: 10;
+    border: 2px solid #0f223d;
+}
+
+.navigationButtons {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    max-width: 400px;
+    /* Match skip button max-width */
+    margin-top: 1rem;
+}
+
+.centeredNavContainer {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    margin-top: 1rem;
+}
+
+.navActionBtn {
+    padding: 0.8rem 2.5rem;
+    border-radius: 100px;
+    font-weight: 700;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.backBtn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+.backBtn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.nextBtn {
+    background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+    border: none;
+    color: white;
+    box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
+}
+
+.nextBtn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(99, 102, 241, 0.6);
+}
+
+.navActionBtn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+    filter: grayscale(1);
+}
+
+/* Summary Screen Styles */
+.summaryContainer {
+    width: 100%;
+    max-width: 1200px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.2rem;
+    /* Reduced from 0.5rem to pull layout up */
+    animation: fadeIn 0.5s ease-out;
+    order: 1;
+}
+
+.summaryTitle {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: white;
+    text-align: center;
+    margin-bottom: 0rem;
+    /* Stripped margin */
+    line-height: 1.2;
+}
+
+.summaryList {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+    /* Reduced gap between cards */
+    padding: 0.5rem 0;
+}
+
+.summaryRow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    /* Vertical centering within card */
+    gap: 0.5rem;
+    padding: 1.25rem 1rem;
+    width: 100%;
+    background: transparent;
+    /* Made invisible */
+    border: none;
+    /* Made invisible */
+    border-radius: 20px;
+    transition: transform 0.2s ease;
+    text-align: center;
+    /* Ensure contents default to center */
+}
+
+.summaryRowControls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* Horizontal centering */
+    gap: 0.8rem;
+    /* Tightened gap between icon and dropdown */
+    width: 100%;
+    max-width: 500px;
+    /* Constrain for better centering on wide screens */
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.summaryRowContent {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5rem;
+    width: 100%;
+}
+
+.summaryElementName {
+    width: 100%;
+    display: block;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: white;
+    text-align: center;
+    /* Force center under all conditions */
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    opacity: 0.9;
+    margin: 0 auto;
+}
+
+.summaryRow:active {
+    cursor: grabbing;
+}
+
+.summaryRowDragging {
+    opacity: 0.4;
+    background: rgba(255, 255, 255, 0.1);
+    border-color: #C084FC;
+}
+
+.summaryIconWrapper {
+    width: 80px;
+    height: 50px;
+    /* Reduced box height while keeping image visible */
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0px;
+    overflow: visible;
+    /* Allow image to bleed */
+}
+
+.summaryIcon {
+    width: 80px;
+    height: 80px;
+    object-fit: contain;
+}
+
+.summaryTraitName {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: white;
+}
+
+.traitDropdown {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: white;
+    padding: 0.7rem 1rem;
+    border-radius: 12px;
+    font-size: 1.05rem;
+    font-weight: 600;
+    width: 100%;
+    min-width: 200px;
+    max-width: 240px;
+    /* Better balance with icon width */
+    cursor: pointer;
+    outline: none;
+    transition: all 0.2s;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='white'%3E%3Cpath fill-rule='evenodd' d='M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z' clip-rule='evenodd' /%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 1rem center;
+    background-size: 1.4rem;
+    padding-right: 3rem;
+    text-align: center;
+}
+
+.traitDropdown:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+.traitDropdown option {
+    background: #1e1b4b;
+    color: white;
+}
+
+.summaryIcon {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.traitSelectorWrapper {
+    width: auto;
+    /* Allow to shrink and bring icon closer */
+}
+
+.summaryTraitName {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: white;
+}
+
+/* Quiz Control Buttons */
+.quizControlsContainer {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    margin-top: auto;
+    margin-bottom: 0.5rem;
+    /* Lowered from 2rem to sit near bottom */
+    order: 6;
+}
+
+.quizButtonGroup {
+    display: flex;
+    gap: 0.8rem;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+}
+
+.quizControlBtn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+    width: 70px;
+    height: 70px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    padding: 10px;
+}
+
+.quizControlBtn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    transform: scale(1.1);
+    border-color: #6366f1;
+}
+
+.quizControlBtn img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+@media (max-width: 600px) and (orientation: portrait) {
+    .quizSection {
+        padding-top: 3rem;
+    }
+
+    .container {
+        padding-top: 0rem !important;
+        /* Removed padding */
+        justify-content: flex-start !important;
+        gap: 0.1rem !important;
+    }
+
+    .questionContainer {
+        gap: 0.5rem !important;
+    }
+
+    .navigationButtons {
+        margin-top: 0.5rem !important;
+    }
+}
+
+/* Mobile Adjustments */
+@media (max-width: 600px) {
+    .traitSubtitle {
+        font-size: 1.8rem;
+    }
+
+    .previewGrid {
+        padding: 0.5rem !important;
+        /* Reduced from 1rem */
+        gap: 0.25rem !important;
+        /* Reduced from 0.5rem */
+        max-width: 95vw;
+        height: auto;
+        min-height: 280px !important;
+        /* Reduced from 440px */
+    }
+
+    .placeholderText {
+        font-size: 1.2rem;
+        padding: 0 1rem;
+    }
+
+    .previewImage {
+        width: 120px !important;
+        /* Reduced from 130px */
+        height: 120px !important;
+    }
+
+    .elementButtons {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 0.4rem;
+        /* Reduced from 0.8rem */
+        width: 100%;
+        max-width: 320px;
+        align-items: stretch;
+    }
+
+    .elementBtn:nth-child(-n+2) {
+        grid-column: span 3;
+    }
+
+    .elementBtn:nth-child(n+3) {
+        grid-column: span 2;
+    }
+
+    .elementBtn {
+        width: 100%;
+        height: 60px;
+        /* Reduced from 70px */
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+    }
+
+    .elementIcon {
+        width: 42px !important;
+        /* Reduced from 50px */
+        height: 42px !important;
+        object-fit: contain;
+    }
+
+    .summaryTitle {
+        font-size: 1.6rem;
+    }
+
+    .summaryRow {
+        padding: 0.6rem 1rem;
+        gap: 0.4rem;
+        border-radius: 16px;
+    }
+
+    .summaryRowControls {
+        gap: 0.8rem;
+    }
+
+    .summaryIconWrapper {
+        width: 50px;
+        height: 50px;
+        padding: 4px;
+    }
+
+    .summaryElementName {
+        font-size: 0.75rem;
+        letter-spacing: 0.5px;
+    }
+
+    .traitDropdown {
+        padding: 0.4rem 0.8rem;
+        font-size: 0.85rem;
+        background-position: right 0.5rem center;
+        background-size: 1.1rem;
+        max-width: 180px;
+    }
+
+    .quizControlBtn {
+        width: 60px;
+        height: 60px;
+        padding: 8px;
+    }
+
+    .continueBtn {
+        padding: 0.8rem 2.5rem;
+        font-size: 1.1rem;
+        margin-top: 0.5rem;
+    }
+}
+
+
+.downloadSTLBtn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 0.8rem 1.5rem;
+    color: white;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    margin-bottom: 2rem;
+}
+
+.downloadSTLBtn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    transform: translateY(-2px);
+}
+
+.instructionOverlay {
+    position: absolute;
+    bottom: 110px;
+    /* Positioned just above the quiz buttons */
+    left: 50%;
+    transform: translateX(-50%);
+    width: 90%;
+    max-width: 400px;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 1.4rem;
+    font-weight: 500;
+    font-style: italic;
+    z-index: 200;
+    pointer-events: none;
+    animation: instructionPulse 3s infinite ease-in-out;
+    line-height: 1.4;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    text-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+}
+
+.instructionIcon {
+    opacity: 0.8;
+    vertical-align: middle;
+}
+
+@media (orientation: portrait) {
+    .instructionOverlay {
+        font-size: 1.1rem;
+        max-width: 320px;
+        bottom: 100px;
+    }
+}
+
+.quizFadeIn {
+    animation: fadeInContent 1.2s ease forwards;
+}
+
+@keyframes fadeInContent {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.skipButtonContainer {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    margin-top: 1.2rem;
+    padding-bottom: 2rem;
+}
+
+.decideSkipBtn {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    color: white;
+    padding: 0.8rem 2.5rem;
+    border-radius: 100px;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    width: 100%;
+    max-width: 400px;
+    /* Match combined width of nav buttons */
+}
+
+.decideSkipBtn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: translateY(-2px);
+    border-color: white;
+}
+
+@media (max-width: 600px) {
+    .navigationButtons {
+        max-width: 320px;
+    }
+
+    .skipButtonContainer {
+        margin-top: 0.5rem;
+        padding-bottom: 1rem;
+    }
+
+    .decideSkipBtn {
+        padding: 0.8rem 1.5rem;
+        font-size: 0.9rem;
+        max-width: 320px;
+    }
+
+    .placeholderText {
+        width: 35px;
+        height: 35px;
+        padding: 2px;
+    }
+
+    .summaryRow {
+        padding: 0.4rem 0.8rem;
+        gap: 0.2rem;
+        border-radius: 12px;
+    }
+
+    .summaryRowControls {
+        gap: 0.5rem;
+    }
+
+    .summaryIconWrapper {
+        width: 50px;
+        height: 30px;
+        /* Reduced box height */
+    }
+
+    .summaryIcon {
+        width: 50px;
+        height: 50px;
+    }
+
+    .summaryElementName {
+        font-size: 0.75rem;
+        letter-spacing: 0.5px;
+    }
+
+    .traitDropdown {
+        padding: 0.35rem 0.7rem;
+        font-size: 0.85rem;
+        background-position: right 0.5rem center;
+        background-size: 1.1rem;
+        max-width: 170px;
+    }
+
+    .continueBtn {
+        padding: 0.7rem 2.5rem;
+        font-size: 1.1rem;
+        margin-top: 0.3rem;
+    }
+}
+
+@media (max-height: 550px) and (orientation: landscape) {
+    .summaryContainer {
+        gap: 0.2rem;
+        padding-top: 0.1rem;
+    }
+
+    .summaryTitle {
+        display: block !important;
+        font-size: 0.85rem !important;
+        margin-bottom: 0 !important;
+        opacity: 0.9;
+    }
+
+    .summaryList {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.35rem;
+        padding: 0;
+    }
+
+    .summaryRow {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 0.25rem;
+        gap: 0.1rem;
+        border-radius: 10px;
+    }
+
+    .summaryRowControls {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 0.4rem;
+        width: 100%;
+    }
+
+    .summaryIconWrapper {
+        width: 40px;
+        height: 25px;
+    }
+
+    .summaryIcon {
+        width: 40px;
+        height: 40px;
+    }
+
+    .summaryElementName {
+        font-size: 0.65rem;
+        white-space: nowrap;
+    }
+
+    .traitDropdown {
+        padding: 0.2rem 0.4rem;
+        font-size: 0.75rem;
+        background-position: right 0.3rem center;
+        background-size: 0.8rem;
+        padding-right: 1.5rem;
+        border-radius: 6px;
+    }
+
+    .continueBtn {
+        padding: 0.4rem 1.5rem;
+        font-size: 0.9rem;
+        position: fixed;
+        bottom: 15px;
+        right: 15px;
+        width: auto;
+    }
 }

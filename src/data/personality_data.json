@@ -1,0 +1,152 @@
+[
+    {
+        "id": "E1",
+        "trait": "Extraversion",
+        "statement": "I’m usually the one who keeps the group chat alive.",
+        "direction": "Standard (+)"
+    },
+    {
+        "id": "E2",
+        "trait": "Extraversion",
+        "statement": "I’d rather have a \"rotting day\" in bed than go to a party.",
+        "direction": "Reverse (-)"
+    },
+    {
+        "id": "E3",
+        "trait": "Extraversion",
+        "statement": "No problem being the \"main character\" in a crowded room.",
+        "direction": "Standard (+)"
+    },
+    {
+        "id": "E4",
+        "trait": "Extraversion",
+        "statement": "I need significant \"me-time\" to recharge after social events.",
+        "direction": "Reverse (-)"
+    },
+    {
+        "id": "E5",
+        "trait": "Extraversion",
+        "statement": "I often start conversations with strangers or baristas.",
+        "direction": "Standard (+)"
+    },
+    {
+        "id": "A1",
+        "trait": "Agreeableness",
+        "statement": "I genuinely enjoy helping my friends, even if it's inconvenient.",
+        "direction": "Standard (+)"
+    },
+    {
+        "id": "A2",
+        "trait": "Agreeableness",
+        "statement": "Tend to point out when people are wrong even if it causes tension.",
+        "direction": "Reverse (-)"
+    },
+    {
+        "id": "A3",
+        "trait": "Agreeableness",
+        "statement": "I’m the \"mom/dad\" of the group who makes sure everyone is okay.",
+        "direction": "Standard (+)"
+    },
+    {
+        "id": "A4",
+        "trait": "Agreeableness",
+        "statement": "I believe most people are mostly looking out for themselves.",
+        "direction": "Reverse (-)"
+    },
+    {
+        "id": "A5",
+        "trait": "Agreeableness",
+        "statement": "I’m quick to forgive when someone gives me a \"half-baked\" apology.",
+        "direction": "Standard (+)"
+    },
+    {
+        "id": "C1",
+        "trait": "Conscientiousness",
+        "statement": "I have my week planned out in a digital calendar or planner.",
+        "direction": "Standard (+)"
+    },
+    {
+        "id": "C2",
+        "trait": "Conscientiousness",
+        "statement": "I often find myself \"doomscrolling\" instead of doing my tasks.",
+        "direction": "Reverse (-)"
+    },
+    {
+        "id": "C3",
+        "trait": "Conscientiousness",
+        "statement": "I’m the person who actually reads the fine print and instructions.",
+        "direction": "Standard (+)"
+    },
+    {
+        "id": "C4",
+        "trait": "Conscientiousness",
+        "statement": "My workspace is a chaotic mess that I’ll \"clean eventually.\"",
+        "direction": "Reverse (-)"
+    },
+    {
+        "id": "C5",
+        "trait": "Conscientiousness",
+        "statement": "I finish my work well before the actual deadline.",
+        "direction": "Standard (+)"
+    },
+    {
+        "id": "N1",
+        "trait": "Neuroticism",
+        "statement": "I often overthink a text message for hours after sending it.",
+        "direction": "Standard (+)"
+    },
+    {
+        "id": "N2",
+        "trait": "Neuroticism",
+        "statement": "I stay pretty chill even when everything is going wrong.",
+        "direction": "Reverse (-)"
+    },
+    {
+        "id": "N3",
+        "trait": "Neuroticism",
+        "statement": "I get \"hangry\" or irritable quite easily when stressed.",
+        "direction": "Standard (+)"
+    },
+    {
+        "id": "N4",
+        "trait": "Neuroticism",
+        "statement": "I rarely feel targeted or offended by what others say.",
+        "direction": "Reverse (-)"
+    },
+    {
+        "id": "N5",
+        "trait": "Neuroticism",
+        "statement": "My mood can change based on a single \"off\" interaction.",
+        "direction": "Standard (+)"
+    },
+    {
+        "id": "O1",
+        "trait": "Openness",
+        "statement": "I’m always down to try a weird new food trend or hobby.",
+        "direction": "Standard (+)"
+    },
+    {
+        "id": "O2",
+        "trait": "Openness",
+        "statement": "I prefer sticking to the same \"comfort\" shows and routines.",
+        "direction": "Reverse (-)"
+    },
+    {
+        "id": "O3",
+        "trait": "Openness",
+        "statement": "I love thinking about deep or abstract \"what if\" ideas.",
+        "direction": "Standard (+)"
+    },
+    {
+        "id": "O4",
+        "trait": "Openness",
+        "statement": "I’m not really into art, poetry, or \"deep\" museum vibes.",
+        "direction": "Reverse (-)"
+    },
+    {
+        "id": "O5",
+        "trait": "Openness",
+        "statement": "I love finding music that sounds completely different",
+        "direction": "Standard (+)"
+    }
+]

@@ -195,5 +195,45 @@
     "type": "quiz_complete_v3",
     "timestamp": "2026-01-21T12:38:24.064Z",
     "receivedAt": "2026-01-21T12:38:24.095Z"
+  },
+  {
+    "id": "fa64134b-c48f-42a5-aa6f-5120970c5baf",
+    "email": "test@example.com",
+    "quizAnswers": {
+      "empathy": 52,
+      "sociable": 86,
+      "persistent": 86,
+      "curious": 100,
+      "relaxed": 100
+    },
+    "selectedProduct": "artifact_1",
+    "format": "Digital",
+    "price": 0,
+    "wishlistedItems": [
+      "Digital"
+    ],
+    "type": "quiz_complete_v3",
+    "timestamp": "2026-02-11T16:56:10.202Z",
+    "receivedAt": "2026-02-11T16:56:10.429Z"
+  },
+  {
+    "id": "e57b3cf8-9e47-41b8-b2ac-5444a80c1215",
+    "email": "test@example.com",
+    "quizAnswers": {
+      "empathy": 68,
+      "sociable": 68,
+      "persistent": 68,
+      "curious": 68,
+      "relaxed": 68
+    },
+    "selectedProduct": "artifact_1",
+    "format": "Digital",
+    "price": 0,
+    "wishlistedItems": [
+      "Digital"
+    ],
+    "type": "quiz_complete_v3",
+    "timestamp": "2026-02-11T18:31:50.381Z",
+    "receivedAt": "2026-02-11T18:31:50.389Z"
   }
 ]

@@ -26,8 +26,8 @@ body {
   overflow-x: hidden;
   background:
     linear-gradient(rgba(10, 10, 10, 0.7), rgba(10, 10, 10, 0.7)),
-    url('/Bg.png'),
-    url('/Bg-1.png');
+    url('/yourplan3d/Bg.png'),
+    url('/yourplan3d/Bg-1.png');
   background-attachment: fixed;
   background-size: cover;
   background-position: center;

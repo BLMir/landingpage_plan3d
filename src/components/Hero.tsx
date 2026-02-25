@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import styles from './Hero.module.css';
 import Carousel from './Carousel';
+import { getAssetPath } from '@/utils/paths';
 
 import Image from 'next/image';
 
@@ -28,10 +29,10 @@ export default function Hero() {
     }, []);
 
     const heroImages = [
-        '/hero_landing_images/Comp_ChicaOceano.png',
-        '/hero_landing_images/Comp_ChicoCreativo.png',
-        '/hero_landing_images/Comp_NinoVolcan.png',
-        '/hero_landing_images/Gemini_Generated_Image_nq36hsnq36hsnq36.png'
+        getAssetPath('/hero_landing_images/Comp_ChicaOceano.png'),
+        getAssetPath('/hero_landing_images/Comp_ChicoCreativo.png'),
+        getAssetPath('/hero_landing_images/Comp_NinoVolcan.png'),
+        getAssetPath('/hero_landing_images/Gemini_Generated_Image_nq36hsnq36hsnq36.png')
     ];
 
     return (
@@ -39,7 +40,7 @@ export default function Hero() {
             <div className={styles.container}>
                 <div className={styles.logo}>
                     <Image
-                        src="/bg_web_elements/logo.png"
+                        src={getAssetPath("/bg_web_elements/logo.png")}
                         alt="Planet 5 Logo"
                         width={200}
                         height={200}

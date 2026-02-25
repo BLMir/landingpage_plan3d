@@ -62,13 +62,33 @@
 
 @media (max-width: 768px) {
     .logo {
-        margin-bottom: -2rem;
-        /* Reduce overlap on mobile */
+        margin-bottom: -3.5rem;
+        /* Pull elements up more - increased from -1rem */
     }
 
     .title {
-        font-size: 3rem;
-        /* Slightly smaller title for better fit */
+        font-size: 2.8rem;
+        /* Slightly smaller for portrait fit */
+    }
+}
+
+@media (max-width: 600px) and (orientation: portrait) {
+    .container {
+        margin-top: -3rem;
+        /* Shift everything up to center */
+        gap: 0.4rem;
+        /* Aggressively tightened from 0.8rem */
+    }
+
+    .logo {
+        margin-bottom: -5.5rem !important;
+        /* Overlap more to pull title up */
+    }
+
+    .visual {
+        width: 320px !important;
+        height: 320px !important;
+        margin: 0.2rem 0 !important;
     }
 }
 
