@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: 'export',
+  // output: 'export',
   basePath: '/yourplan3d',
   assetPrefix: '/yourplan3d',
   images: {
@@ -9,7 +9,7 @@ const nextConfig: NextConfig = {
   },
   // @ts-ignore - Turbopack root config for workspace resolution
   turbopack: {
-    root: '.',
+    root: process.cwd(),
   },
 };
 
