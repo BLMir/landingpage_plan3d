@@ -8,6 +8,7 @@ import { useProgress } from '@react-three/drei';
 import { ArrowLeft, ArrowRight, Download, Mail } from './Icons';
 import * as THREE from 'three';
 import { STLExporter } from 'three/examples/jsm/exporters/STLExporter.js';
+import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { getAssetPath } from '@/utils/paths';
 import personalityData from '@/data/personality_data.json';
@@ -363,7 +364,8 @@ export default function WorldQuiz() {
         }, 600);
     };
 
-    const handleDownloadSTL = () => {
+    const handleDownloadSTL = async (exportMode: 'standard' | 'hole' | 'ring' | 'ring_hole' | 'four_holes' = 'standard') => {
+        const withHole = exportMode === 'hole';
         const scene = planet3DRef.current?.getScene();
         if (!scene) return;
 
@@ -499,10 +501,11 @@ export default function WorldQuiz() {
             return x * x * (3 - 2 * x); // smoothstep
         };
 
-        const bakeMesh = (mesh: THREE.Mesh): THREE.BufferGeometry | null => {
+        const bakeMesh = (mesh: THREE.Mesh, withTwoHoles?: { r: number, xOffset: number, onlyTop?: boolean }): THREE.BufferGeometry | null => {
             if (!mesh.geometry || !mesh.visible) return null;
 
             const isPlanet = mesh.name === 'planet_base_mesh';
+            const holeRadius = 0.7; // Another 2x bigger as requested
 
             // Expand indexed geometry to non-indexed for stability
             const rawGeo = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
@@ -681,14 +684,83 @@ export default function WorldQuiz() {
                 }
             }
 
-            geometry.computeVertexNormals();
+            // --- HOLE PUNCHING LOGIC ---
+            if (withHole) {
+                // Smooth Clamping Logic:
+                // Move vertices that are inside the hole to the boundary to create a clean circle.
+                // Discard triangles that are completely inside.
+                for (let i = 0; i < posAttr.count; i += 3) {
+                    const v1 = new THREE.Vector3().fromBufferAttribute(posAttr, i);
+                    const v2 = new THREE.Vector3().fromBufferAttribute(posAttr, i + 1);
+                    const v3 = new THREE.Vector3().fromBufferAttribute(posAttr, i + 2);
+
+                    const d1Sq = v1.x * v1.x + v1.z * v1.z;
+                    const d2Sq = v2.x * v2.x + v2.z * v2.z;
+                    const d3Sq = v3.x * v3.x + v3.z * v3.z;
+                    const rSq = holeRadius * holeRadius;
+
+                    const in1 = d1Sq < rSq;
+                    const in2 = d2Sq < rSq;
+                    const in3 = d3Sq < rSq;
+
+                    if (in1 && in2 && in3) {
+                        // All vertices inside: discard triangle
+                        posAttr.setXYZ(i, 0, 0, 0);
+                        posAttr.setXYZ(i + 1, 0, 0, 0);
+                        posAttr.setXYZ(i + 2, 0, 0, 0);
+                    } else if (in1 || in2 || in3) {
+                        // Partial overlap: move interior vertices to the boundary for a smooth circle
+                        const clamp = (v: THREE.Vector3) => {
+                            const d = Math.sqrt(v.x * v.x + v.z * v.z);
+                            if (d < holeRadius && d > 0.001) {
+                                const factor = holeRadius / d;
+                                v.x *= factor;
+                                v.z *= factor;
+                            }
+                        };
+                        if (in1) clamp(v1);
+                        if (in2) clamp(v2);
+                        if (in3) clamp(v3);
+                        posAttr.setXYZ(i, v1.x, v1.y, v1.z);
+                        posAttr.setXYZ(i + 1, v2.x, v2.y, v2.z);
+                        posAttr.setXYZ(i + 2, v3.x, v3.y, v3.z);
+                    }
+                }
+            }
+
+            // geometry.computeVertexNormals(); // Removed: compute after merging all parts
+            if (withTwoHoles) {
+                const { r, xOffset } = withTwoHoles;
+                const rSq = r * r;
+                for (let i = 0; i < posAttr.count; i += 3) {
+                    const v1 = new THREE.Vector3().fromBufferAttribute(posAttr, i);
+                    const v2 = new THREE.Vector3().fromBufferAttribute(posAttr, i + 1);
+                    const v3 = new THREE.Vector3().fromBufferAttribute(posAttr, i + 2);
+
+                    const isInside = (v: THREE.Vector3) => {
+                        // Optional: only cut at the top half (for 2 holes mode)
+                        if (withTwoHoles.onlyTop && v.y < 0) return false;
+
+                        // Two holes at (+xOffset, 0, 0) and (-xOffset, 0, 0) in polar projection (X-Z plane at top)
+                        const d1Sq = Math.pow(v.x - xOffset, 2) + v.z * v.z;
+                        const d2Sq = Math.pow(v.x + xOffset, 2) + v.z * v.z;
+                        return d1Sq < rSq || d2Sq < rSq;
+                    };
+
+                    if (isInside(v1) || isInside(v2) || isInside(v3)) {
+                        posAttr.setXYZ(i, 0, 0, 0);
+                        posAttr.setXYZ(i + 1, 0, 0, 0);
+                        posAttr.setXYZ(i + 2, 0, 0, 0);
+                    }
+                }
+            }
+
             if (mesh.geometry.index) rawGeo.dispose();
             return geometry;
         };
 
         const geometries: THREE.BufferGeometry[] = [];
         scene.traverse((child) => {
-            // Include everything that is a Mesh and not explicitly excluded
             if ((child as THREE.Mesh).isMesh && !child.name.startsWith('exclusion_')) {
                 const meshChild = child as THREE.Mesh;
                 const baked = bakeMesh(meshChild);
@@ -696,9 +768,94 @@ export default function WorldQuiz() {
             }
         });
 
+        if (exportMode === 'ring' || exportMode === 'ring_hole' || exportMode === 'four_holes') {
+            if (exportMode === 'ring_hole' || exportMode === 'four_holes') {
+                // Revised 2-hole/4-hole logic: larger circles and more separated
+                const holeRadius = 0.6;
+                const gap = holeRadius * 3;
+                const xOffset = (holeRadius + gap / 2); // center of hole 1
+                const onlyTop = exportMode === 'ring_hole';
+
+                console.log(`Applying ${onlyTop ? '2' : '4'}-hole subtraction: radius=${holeRadius}, offset=${xOffset}`);
+
+                geometries.length = 0; // Clear standard bake
+                scene.traverse((child) => {
+                    if ((child as THREE.Mesh).isMesh && !child.name.startsWith('exclusion_')) {
+                        const baked = bakeMesh(child as THREE.Mesh, { r: holeRadius, xOffset, onlyTop });
+                        if (baked) geometries.push(baked);
+                    }
+                });
+            } else {
+                // Export Mode: Ring (Additive)
+                const loader = new FBXLoader();
+                const ringModels = ['/models/anilla.fbx'];
+
+                let planetMaxY = 0;
+                geometries.forEach(geo => {
+                    geo.computeBoundingBox();
+                    if (geo.boundingBox) {
+                        planetMaxY = Math.max(planetMaxY, geo.boundingBox.max.y);
+                    }
+                });
+
+                for (const modelPath of ringModels) {
+                    try {
+                        const ringGroup = await new Promise<THREE.Group>((resolve, reject) => {
+                            loader.load(getAssetPath(modelPath), resolve, undefined, reject);
+                        });
+
+                        let targetRingProcessed = false;
+                        ringGroup.traverse((child) => {
+                            if ((child as THREE.Mesh).isMesh && !targetRingProcessed) {
+                                const mesh = child as THREE.Mesh;
+                                const isTargetMesh = mesh.name.toLowerCase().includes('anilla') ||
+                                    mesh.name.toLowerCase().includes('ring') ||
+                                    ringGroup.children.length === 1;
+
+                                if (isTargetMesh) {
+                                    targetRingProcessed = true;
+                                    const ringGeo = mesh.geometry.clone();
+                                    mesh.updateMatrixWorld(true);
+                                    ringGeo.applyMatrix4(mesh.matrixWorld);
+
+                                    ringGeo.computeBoundingBox();
+                                    const center = new THREE.Vector3();
+                                    ringGeo.boundingBox?.getCenter(center);
+                                    ringGeo.applyMatrix4(new THREE.Matrix4().makeTranslation(-center.x, -center.y, -center.z));
+
+                                    ringGeo.computeBoundingBox();
+                                    const size = new THREE.Vector3();
+                                    ringGeo.boundingBox?.getSize(size);
+                                    const currentMaxDim = Math.max(size.x, size.y, size.z);
+                                    const targetSize = 1.6;
+                                    const scaleFactor = targetSize / currentMaxDim;
+                                    ringGeo.applyMatrix4(new THREE.Matrix4().makeScale(scaleFactor, scaleFactor, scaleFactor));
+
+                                    ringGeo.applyMatrix4(new THREE.Matrix4().makeRotationX(Math.PI / 2));
+
+                                    const finalY = planetMaxY + 0.5;
+                                    ringGeo.applyMatrix4(new THREE.Matrix4().makeTranslation(0, finalY, 0));
+
+                                    const nonIndexed = ringGeo.toNonIndexed();
+                                    const finalRingGeo = new THREE.BufferGeometry();
+                                    finalRingGeo.setAttribute('position', nonIndexed.attributes.position.clone());
+                                    geometries.push(finalRingGeo);
+                                    nonIndexed.dispose();
+                                    ringGeo.dispose();
+                                }
+                            }
+                        });
+                    } catch (err) {
+                        console.warn(`Failed to process model ${modelPath}:`, err);
+                    }
+                }
+            }
+        }
+
         if (geometries.length === 0) return;
 
         const merged = BufferGeometryUtils.mergeGeometries(geometries);
+        merged.computeVertexNormals(); // Compute normals for the entire merged model
         const finalMesh = new THREE.Mesh(merged);
 
         const exporter = new STLExporter();
@@ -707,7 +864,12 @@ export default function WorldQuiz() {
         const blob = new Blob([result], { type: 'application/octet-stream' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = `YourWorld3D_${new Date().getTime()}.stl`;
+        let fileName = `YourWorld3D_${new Date().getTime()}.stl`;
+        if (exportMode === 'hole') fileName = `YourWorld3D_Hole_${new Date().getTime()}.stl`;
+        if (exportMode === 'ring') fileName = `YourWorld3D_Ring_${new Date().getTime()}.stl`;
+        if (exportMode === 'ring_hole') fileName = `YourWorld3D_2Holes_${new Date().getTime()}.stl`;
+        if (exportMode === 'four_holes') fileName = `YourWorld3D_4Holes_${new Date().getTime()}.stl`;
+        link.download = fileName;
         link.click();
 
         geometries.forEach(g => g.dispose());
@@ -899,8 +1061,9 @@ export default function WorldQuiz() {
                             </div>
                             <div className={styles.previewImageWrapper}>
                                 <div className={styles.lowHighLabelContainer}>
-                                    <span className={styles.lowHighLabel}>&nbsp;High&nbsp;</span>
+                                    <span className={styles.lowHighLabel}>Low</span>
                                     <Image src={getAssetPath('/1_Quiz Planet Images/plus.png')} alt="" width={16} height={16} className={styles.logicIcon} />
+                                    <span className={styles.lowHighLabel}>High</span>
                                 </div>
                                 <Image src={getAssetPath('/1_Quiz Planet Images/empty_space_planet.png')} alt="Empty" width={250} height={250} className={styles.previewImage} />
                             </div>
@@ -1090,6 +1253,53 @@ export default function WorldQuiz() {
         <section className={styles.quizSection} id="quiz">
             {showInitialLoader && renderInitialLoader()}
             {planetLoading && renderPlanetLoader()}
+
+            {/* Persistent Export STL Buttons in corner */}
+            {(view === 'quiz' || view === 'email' || view === 'artifact') && (
+                <div className={styles.cornerControlsContainer}>
+                    <button
+                        className={styles.cornerExportBtn}
+                        onClick={() => handleDownloadSTL('standard')}
+                        title="Export Standard 3D Model (.STL)"
+                    >
+                        <Download size={24} />
+                        <span className={styles.exportBtnText}>Export STL</span>
+                    </button>
+                    <button
+                        className={`${styles.cornerExportBtn} ${styles.holeBtn}`}
+                        onClick={() => handleDownloadSTL('hole')}
+                        title="Export with Massive Hole"
+                    >
+                        <Image src={getAssetPath('/1_Quiz Planet Images/middle.png')} alt="" width={20} height={20} className={styles.holeIcon} />
+                        <span className={styles.exportBtnText}>Export + Hole</span>
+                    </button>
+                    <button
+                        className={`${styles.cornerExportBtn} ${styles.ringBtn}`}
+                        onClick={() => handleDownloadSTL('ring')}
+                        title="Export with Attached Ring Loop"
+                    >
+                        <Image src={getAssetPath('/1_Quiz Planet Images/islands.png')} alt="" width={20} height={20} className={styles.ringIcon} />
+                        <span className={styles.exportBtnText}>Export + Ring</span>
+                    </button>
+                    <button
+                        className={`${styles.cornerExportBtn} ${styles.holeBtn}`}
+                        onClick={() => handleDownloadSTL('ring_hole')}
+                        title="Export with 2 Holes for Cord"
+                    >
+                        <Image src={getAssetPath('/1_Quiz Planet Images/middle.png')} alt="" width={20} height={20} className={styles.holeIcon} />
+                        <span className={styles.exportBtnText}>Export + 2 Holes</span>
+                    </button>
+                    <button
+                        className={`${styles.cornerExportBtn} ${styles.holeBtn}`}
+                        onClick={() => handleDownloadSTL('four_holes')}
+                        title="Export with 4 Holes for Cord (Top & Bottom)"
+                    >
+                        <Image src={getAssetPath('/1_Quiz Planet Images/middle.png')} alt="" width={20} height={20} className={styles.holeIcon} />
+                        <span className={styles.exportBtnText}>Export + 4 Holes</span>
+                    </button>
+                </div>
+            )}
+
             <div className={styles.container}>
                 {/* Global Planet Visual: Visible during quiz (normal) and email/artifact (blurred) */}
                 {(view === 'quiz' || view === 'email' || view === 'artifact') && (
@@ -1250,11 +1460,27 @@ export default function WorldQuiz() {
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={handleDownloadSTL}
+                                    onClick={() => handleDownloadSTL('standard')}
                                     className={styles.secondaryDownloadBtn}
                                 >
                                     <Download size={20} />
-                                    Download 3D Model (.STL)
+                                    Download (.STL)
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleDownloadSTL('hole')}
+                                    className={`${styles.secondaryDownloadBtn} ${styles.holeBtn}`}
+                                >
+                                    <Image src={getAssetPath('/1_Quiz Planet Images/middle.png')} alt="" width={18} height={18} className={styles.holeIcon} />
+                                    Download + Hole (.STL)
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleDownloadSTL('ring')}
+                                    className={`${styles.secondaryDownloadBtn} ${styles.ringBtn}`}
+                                >
+                                    <Image src={getAssetPath('/1_Quiz Planet Images/islands.png')} alt="" width={18} height={18} className={styles.ringIcon} />
+                                    Download + Ring (.STL)
                                 </button>
                             </form>
                         </div>
