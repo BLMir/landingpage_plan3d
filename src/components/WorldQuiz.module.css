@@ -82,12 +82,48 @@
 .container {
     width: 100%;
     max-width: 600px;
+    height: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 3rem;
     position: relative;
     z-index: 10;
+}
+
+.topQuizLayer {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    z-index: 20;
+    opacity: 0;
+}
+
+.centerQuizLayer {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    position: relative;
+    min-height: 300px;
+}
+
+.planetSpacer {
+    height: 350px;
+    /* Reduced to leave more space for top/bottom */
+}
+
+.bottomQuizLayer {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    z-index: 20;
+    margin-bottom: 2rem;
+    padding: 0 1rem;
+    opacity: 0;
 }
 
 .stepperContainer {
@@ -128,6 +164,36 @@
     font-weight: 400;
     /* Changed from 700 to Regular */
     order: 2;
+    z-index: 10;
+}
+
+.quizFadeContainer {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+    transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.fadeOut {
+    opacity: 0 !important;
+    transition: opacity 0.8s ease;
+}
+
+.fadeIn {
+    opacity: 1 !important;
+    transition: opacity 0.8s ease;
+}
+
+.descriptorText {
+    font-size: 1.25rem;
+    color: white;
+    font-weight: 400;
+    margin-top: 1rem;
+    height: 1.5em;
+    /* Pre-allocate space */
+    text-align: center;
 }
 
 .activeOptionDisplay {
@@ -205,7 +271,7 @@
     overflow: hidden;
     height: 3.125em;
     /* Exactly 2 lines (1.25 * 2 + a tiny bit) */
-    transition: opacity 0.4s ease;
+    transition: opacity 0.8s ease;
 }
 
 .questionTitleFading {
@@ -215,6 +281,118 @@
 .optionDesc {
     font-size: 1.1rem;
     color: #cbd5e1;
+}
+
+.unifiedTextContainer {
+    width: 100%;
+    min-height: 5.5rem;
+    /* Increased for 3 rows */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    text-align: center;
+}
+
+.descriptorText,
+.instructionOverlay {
+    position: absolute;
+    width: 100%;
+    max-width: 500px;
+    transition: opacity 0.8s ease, transform 0.8s ease;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(5px);
+    text-align: center;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%) translateY(5px);
+}
+
+.descriptorText.active,
+.instructionOverlay.active {
+    opacity: 1;
+    transform: translate(-50%, -50%) translateY(0);
+    pointer-events: auto;
+}
+
+.descriptorText.hidden,
+.instructionOverlay.hidden {
+    opacity: 0;
+    transform: translate(-50%, -50%) translateY(5px);
+    pointer-events: none;
+}
+
+.descriptorText {
+    font-size: 1.25rem;
+    color: white;
+    font-weight: 500;
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+}
+
+.instructionOverlay {
+    font-size: 1.15rem;
+    color: rgba(255, 255, 255, 0.8);
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center;
+    justify-content: center;
+    gap: 0.15rem;
+    line-height: 1.1;
+    width: 100%;
+    max-width: 500px;
+    margin: 0 auto;
+    text-align: center;
+    position: absolute;
+    height: auto;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) translateY(5px);
+}
+
+.instructionOverlay div {
+    width: 100%;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.instructionIconLeft {
+    animation: pushLeft 1.2s infinite ease-in-out;
+}
+
+.instructionIconRight {
+    animation: pushRight 1.2s infinite ease-in-out;
+}
+
+@keyframes pushLeft {
+
+    0%,
+    100% {
+        transform: translateX(0);
+        opacity: 0.8;
+    }
+
+    50% {
+        transform: translateX(-6px);
+        opacity: 1;
+    }
+}
+
+@keyframes pushRight {
+
+    0%,
+    100% {
+        transform: translateX(0);
+        opacity: 0.8;
+    }
+
+    50% {
+        transform: translateX(6px);
+        opacity: 1;
+    }
 }
 
 /* Planet Labels */
@@ -430,15 +608,11 @@
 }
 
 .logoSliderWrapper {
-    width: 160%;
-    /* Wider slider */
-    margin-left: -30%;
-    /* Center it */
+    width: 100%;
+    height: 64px;
     position: relative;
-    height: 80px;
     display: flex;
     align-items: center;
-    justify-content: center;
 }
 
 .progressContainer {
@@ -446,12 +620,15 @@
     display: flex;
     gap: 8px;
     margin-top: 2rem;
-    /* Added margin for Portrait - "less air" between nav and title if title is below */
     margin-bottom: 2rem;
     padding: 0 1rem;
     max-width: 400px;
     order: 1;
-    /* Keep it controlled */
+    transition: opacity 0.8s ease;
+}
+
+.progressContainer.transitioning {
+    opacity: 0.5 !important;
 }
 
 .progressLine {
@@ -479,6 +656,82 @@
     top: 50%;
     transform: translateY(-50%);
     z-index: 1;
+    pointer-events: none;
+}
+
+.logoSliderInteractable {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    outline: none;
+    cursor: pointer;
+    position: relative;
+    z-index: 2;
+}
+
+/* Slider Thumb - Webkit */
+.logoSliderInteractable::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 64px;
+    height: 64px;
+    background: #6366f1;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    filter: drop-shadow(0 0 15px rgba(99, 102, 241, 0.6));
+    transition: transform 0.2s ease, background-color 0.2s ease;
+    position: relative;
+    z-index: 5;
+}
+
+.logoSliderInteractable:active::-webkit-slider-thumb {
+    transform: scale(1.1);
+    background: #818cf8;
+}
+
+/* Slider Thumb - Firefox */
+.logoSliderInteractable::-moz-range-thumb {
+    width: 64px;
+    height: 64px;
+    background: #6366f1;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    filter: drop-shadow(0 0 15px rgba(99, 102, 241, 0.6));
+    transition: transform 0.2s ease, background-color 0.2s ease;
+}
+
+.logoSliderInteractable:active::-moz-range-thumb {
+    transform: scale(1.1);
+}
+
+.sliderPercentage {
+    position: absolute;
+    top: 50%;
+    /* Refined tracking: thumb center moves from 32px to (100% - 32px) */
+    left: calc(32px + (var(--slider-value, 50) * (100% - 64px) / 100));
+    transform: translate(-50%, -50%);
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: white;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+    z-index: 10;
+    pointer-events: none;
+    white-space: nowrap;
+}
+
+.sliderContainerVisible {
+    width: 100%;
+    max-width: 420px;
+    /* Adjusted width */
+    margin: 1.5rem 0;
+    display: flex;
+    justify-content: center;
+    padding: 0 40px;
+    /* Leave space for thumb at edges */
 }
 
 .logoSlider {
@@ -661,12 +914,12 @@
 /* Global Planet Layout */
 .globalPlanetContainer {
     width: 100%;
+    height: 100%;
     display: flex;
-    flex-direction: column;
     align-items: center;
+    justify-content: center;
     transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
     z-index: 5;
-    order: 3;
     position: relative;
 }
 
@@ -910,15 +1163,27 @@
     line-height: 1.4;
 }
 
+
+
 .pricePillsContainer {
     position: relative;
-    z-index: 2;
     display: flex;
     gap: 0.5rem;
     width: 100%;
     justify-content: center;
     padding-top: 0.5rem;
     border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.quizNavigationButtons {
+    display: flex;
+    flex-direction: row;
+    /* Force row */
+    gap: 1.5rem;
+    margin-top: 0.5rem;
+    width: 100%;
+    justify-content: center;
+    padding-bottom: 2rem;
 }
 
 .pricePill {
@@ -939,6 +1204,42 @@
 .pricePill:hover {
     background: rgba(56, 189, 248, 0.2);
     border-color: #38bdf8;
+}
+
+.navControlBtn {
+    transition: all 0.8s ease;
+}
+
+.navControlBtn.transitioning {
+    opacity: 0.5 !important;
+    pointer-events: none;
+    filter: grayscale(0.5);
+}
+
+.navControlBtn {
+    padding: 1rem 3rem;
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: black;
+    background: white;
+    border: none;
+    border-radius: 50px;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s, background-color 0.2s;
+    box-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
+    z-index: 10;
+    white-space: nowrap;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.navControlBtn:hover:not(.unclickable) {
+    transform: translateY(-2px) scale(1.05);
+    box-shadow: 0 5px 25px rgba(255, 255, 255, 0.4);
+    background: white;
 }
 
 .activePill {
@@ -2003,42 +2304,10 @@
     transform: translateY(-2px);
 }
 
-.instructionOverlay {
-    position: absolute;
-    bottom: 110px;
-    /* Positioned just above the quiz buttons */
-    left: 50%;
-    transform: translateX(-50%);
-    width: 90%;
-    max-width: 400px;
-    text-align: center;
-    color: rgba(255, 255, 255, 0.6);
-    font-size: 1.4rem;
-    font-weight: 500;
-    font-style: italic;
-    z-index: 200;
-    pointer-events: none;
-    animation: instructionPulse 3s infinite ease-in-out;
-    line-height: 1.4;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-    text-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
-}
 
 .instructionIcon {
     opacity: 0.8;
     vertical-align: middle;
-}
-
-@media (orientation: portrait) {
-    .instructionOverlay {
-        font-size: 1.1rem;
-        max-width: 320px;
-        bottom: 100px;
-    }
 }
 
 .quizFadeIn {
@@ -2220,5 +2489,47 @@
         bottom: 15px;
         right: 15px;
         width: auto;
+    }
+}
+
+/* Landscape / Short Viewport Optimizations */
+@media (orientation: landscape) and (max-height: 700px) {
+    .container {
+        padding: 0.5rem 0;
+    }
+
+    .topQuizLayer {
+        margin-top: 0.2rem;
+    }
+
+    .questionTitle {
+        font-size: 1.6rem;
+        margin-bottom: 0.5rem;
+        height: auto;
+        min-height: 0;
+    }
+
+    .centerQuizLayer {
+        min-height: 200px;
+    }
+
+    .bottomQuizLayer {
+        margin-bottom: 0.5rem;
+        gap: 0.5rem;
+    }
+
+    .unifiedTextContainer {
+        min-height: 4.5rem;
+        margin-top: -2rem;
+        /* Push up further in landscape to prevent slider overlap */
+    }
+
+    .sliderContainerVisible {
+        margin: 0.3rem 0;
+    }
+
+    .quizNavigationButtons {
+        padding-bottom: 0.5rem;
+        margin-top: 0;
     }
 }

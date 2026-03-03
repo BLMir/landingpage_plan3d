@@ -80,7 +80,7 @@ const artifactOptions = [
 
 
 export default function WorldQuiz() {
-    const [view, setView] = useState<'traitSelection' | 'traitSummary' | 'quiz' | 'email' | 'artifact' | 'success'>('traitSummary');
+    const [view, setView] = useState<'traitSelection' | 'traitSummary' | 'quiz' | 'email' | 'artifact' | 'success'>('quiz');
     const [isQuizReady, setIsQuizReady] = useState(false);
     const [showInitialLoader, setShowInitialLoader] = useState(false);
     const [loaderProgress, setLoaderProgress] = useState(0);
@@ -108,6 +108,7 @@ export default function WorldQuiz() {
     const [email, setEmail] = useState('');
     const [userName, setUserName] = useState('');
     const [userAge, setUserAge] = useState('');
+    const [isQuestionTransitioning, setIsQuestionTransitioning] = useState(false);
 
     // Instruction Text State (Fading)
     const [showSelectionInstruction, setShowSelectionInstruction] = useState(true);
@@ -257,6 +258,53 @@ export default function WorldQuiz() {
         return questions;
     }, [assignments, view]);
 
+    const getDescriptorText = (questionIndex: number, value: number) => {
+        // value is 0-100
+        const isQ1 = questionIndex < 3;
+        const isQ2 = questionIndex >= 3 && questionIndex < 6;
+        const isQ3 = questionIndex >= 6 && questionIndex < 9;
+        const isQ4 = questionIndex >= 9 && questionIndex < 12;
+        const isQ5 = questionIndex >= 12;
+
+        if (isQ1) {
+            if (value <= 9) return "Self-prioritizing, Achievement-driven, Evidence-minded";
+            if (value <= 29) return "Self-prioritizing, Achievement-driven";
+            if (value < 49) return "Self-prioritizing";
+            if (value >= 91) return "Compassionate, Sympathetic, Trust-ready";
+            if (value >= 71) return "Compassionate, Sympathetic";
+            if (value > 51) return "Compassionate";
+        } else if (isQ2) {
+            if (value <= 9) return "Reflective, Private, Self contained";
+            if (value <= 29) return "Reflective, Private";
+            if (value < 49) return "Reflective";
+            if (value >= 91) return "Talkative, Outgoing, Talkative, Externally energized";
+            if (value >= 71) return "Talkative, Outgoing";
+            if (value > 51) return "Talkative";
+        } else if (isQ3) {
+            if (value <= 9) return "Flexible, Non-rigid, Improvisational";
+            if (value <= 29) return "Flexible, Non-rigid";
+            if (value < 49) return "Flexible";
+            if (value >= 91) return "Disciplined, Reliable, Organised";
+            if (value >= 71) return "Disciplined, Reliable";
+            if (value > 51) return "Disciplined";
+        } else if (isQ4) {
+            if (value <= 9) return "Practical, Routine oriented, Tradition-guided";
+            if (value <= 29) return "Practical, Routine oriented";
+            if (value < 49) return "Practical";
+            if (value >= 91) return "Creative, Adventurous, Imaginative";
+            if (value >= 71) return "Creative, Adventurous";
+            if (value > 51) return "Creative";
+        } else if (isQ5) {
+            if (value <= 9) return "Vigilant, Cautious, Sensitive";
+            if (value <= 29) return "Vigilant, Cautious";
+            if (value < 49) return "Vigilant";
+            if (value >= 91) return "Calm, Confident, Resilient";
+            if (value >= 71) return "Calm, Confident";
+            if (value > 51) return "Calm";
+        }
+        return null;
+    };
+
     const currentQuestion = quizQuestions[currentQuestionIndex];
 
     // Inactivity Instruction Logic
@@ -268,6 +316,37 @@ export default function WorldQuiz() {
             setIsQuizReady(false);
         }
     }, [view]);
+
+    // Auto-start planet loader when quiz view is active
+    useEffect(() => {
+        if (view === 'quiz' && !planetLoading && planetProgress === 0) {
+            setPlanetLoading(true);
+            setPlanetProgress(0);
+            const startTime = Date.now();
+            const duration = 7000;
+
+            const interval = setInterval(() => {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(100, Math.floor((elapsed / duration) * 100));
+                setPlanetProgress(progress);
+
+                if (elapsed >= duration) {
+                    clearInterval(interval);
+                    setPlanetLoading(false);
+                }
+            }, 16);
+
+            // Anchor to the quiz section
+            const quizEl = document.getElementById('quiz');
+            if (quizEl) {
+                // Only scroll if we are not already at the quiz section
+                // This helps when the page loads with #quiz or if user clicked Hero CTA
+                if (window.location.hash !== '#quiz') {
+                    // quizEl.scrollIntoView({ behavior: 'smooth' });
+                }
+            }
+        }
+    }, [view, planetLoading, planetProgress]);
 
     useEffect(() => {
         const resetTimer = () => {
@@ -305,63 +384,39 @@ export default function WorldQuiz() {
         }
     };
 
-    const animateSliderTo = (target: number) => {
-        const start = sliderValue;
-        const duration = 400;
-        const startTime = performance.now();
-
-        const animate = (currentTime: number) => {
-            const elapsed = currentTime - startTime;
-            const progress = Math.min(elapsed / duration, 1);
-            // Ease out cubic
-            const ease = 1 - Math.pow(1 - progress, 3);
-            const current = start + (target - start) * ease;
-
-            updateSliderAndPlanet(Math.round(current));
-
-            if (progress < 1) {
-                requestAnimationFrame(animate);
-            }
-        };
-        requestAnimationFrame(animate);
-    };
-
-    const handleQuizButtonClick = (type: 'minusminus' | 'minus' | 'middle' | 'plus' | 'plusplus') => {
-        if (!currentQuestion) return;
-
-        const isStandard = currentQuestion.direction === 'Standard (+)';
-        let newValue = sliderValue;
-
-        switch (type) {
-            case 'minusminus':
-                newValue = isStandard ? Math.max(0, sliderValue - 25) : Math.min(100, sliderValue + 25);
-                break;
-            case 'minus':
-                newValue = isStandard ? Math.max(0, sliderValue - 15) : Math.min(100, sliderValue + 15);
-                break;
-            case 'middle':
-                {
-                    const s = sliderValue;
-                    const wobbleShift = isStandard ? -1 : 1;
-                    updateSliderAndPlanet(Math.max(0, Math.min(100, s + wobbleShift)));
-                    setTimeout(() => updateSliderAndPlanet(s), 100);
-                    newValue = s; // Stay at current position
-                }
-                break;
-            case 'plus':
-                newValue = isStandard ? Math.min(100, sliderValue + 15) : Math.max(0, sliderValue - 15);
-                break;
-            case 'plusplus':
-                newValue = isStandard ? Math.min(100, sliderValue + 25) : Math.max(0, sliderValue - 25);
-                break;
-        }
-
-        animateSliderTo(newValue);
-        // Automatically advance after animation duration (400ms) + small buffer
+    const handleBackQuestion = () => {
+        if (currentQuestionIndex === 0) return;
+        setIsQuestionTransitioning(true);
         setTimeout(() => {
-            handleNextQuestion();
-        }, 600);
+            setCurrentQuestionIndex(prev => prev - 1);
+            setSliderValue(50);
+            setIsQuestionTransitioning(false);
+        }, 800);
     };
+
+    const handleNextQuestion = () => {
+        setIsQuestionTransitioning(true);
+        setAllAnswers({ ...allAnswers, [currentQuestion.id]: sliderValue });
+
+        setTimeout(() => {
+            if (currentQuestionIndex < quizQuestions.length - 1) {
+                const nextIndex = currentQuestionIndex + 1;
+                setCurrentQuestionIndex(nextIndex);
+
+                // If the element changes (new trait group), reset to 50
+                const nextQuestion = quizQuestions[nextIndex];
+                if (nextQuestion.element.id !== currentQuestion.element.id) {
+                    setSliderValue(50);
+                }
+                setShowIdleOverlay(false);
+            } else {
+                setView('email');
+            }
+            setIsQuestionTransitioning(false);
+        }, 800);
+    };
+
+    // handleQuizButtonClick removed
 
     const handleDownloadSTL = () => {
         const scene = planet3DRef.current?.getScene();
@@ -715,32 +770,7 @@ export default function WorldQuiz() {
     };
 
 
-    const handleNextQuestion = () => {
-        setIsTitleFading(true);
-
-        setTimeout(() => {
-            const nextIndex = currentQuestionIndex + 1;
-            const isEndOfTraitGroup = nextIndex % 5 === 0;
-
-            setAllAnswers({ ...allAnswers, [currentQuestion.id]: sliderValue });
-
-            if (currentQuestionIndex < quizQuestions.length - 1) {
-                setCurrentQuestionIndex(nextIndex);
-
-                // If the element changes (new trait group), reset to 50
-                // For 3 questions per trait, element changes every 3 questions
-                const nextQuestion = quizQuestions[nextIndex];
-                if (nextQuestion.element.id !== currentQuestion.element.id) {
-                    setSliderValue(50);
-                }
-
-                setShowIdleOverlay(false);
-            } else {
-                setView('email');
-            }
-            setIsTitleFading(false);
-        }, 400); // Duration of fade out
-    };
+    // Navigation functions handle state changes
 
     const handleStartQuiz = () => {
         // Finalize assignments based on orderedTraits
@@ -1092,12 +1122,13 @@ export default function WorldQuiz() {
             {planetLoading && renderPlanetLoader()}
             <div className={styles.container}>
                 {/* Global Planet Visual: Visible during quiz (normal) and email/artifact (blurred) */}
-                {(view === 'quiz' || view === 'email' || view === 'artifact') && (
+                {/* Global Planet Visual: Visible during email/artifact (blurred) */}
+                {(view === 'email' || view === 'artifact') && (
                     <div
                         className={`
                             ${styles.globalPlanetContainer} 
                             ${styles.globalPlanetVisible}
-                            ${(view === 'email' || view === 'artifact') ? styles.globalPlanetBlurred : ''}
+                            ${styles.globalPlanetBlurred}
                         `}
                         style={{ '--glow-color': currentGlowColor } as React.CSSProperties}
                     >
@@ -1107,7 +1138,7 @@ export default function WorldQuiz() {
                                     <Planet3D
                                         ref={planet3DRef}
                                         values={elementOptions.map(opt => elementValues[opt.id])}
-                                        currentSection={(view === 'email' || view === 'artifact') ? 4 : (currentQuestion ? elementOptions.findIndex(e => e.id === currentQuestion.element.id) : -1)}
+                                        currentSection={4}
                                         tintColor={tintInfo.color}
                                         tintOpacity={tintInfo.opacity}
                                     />
@@ -1115,11 +1146,9 @@ export default function WorldQuiz() {
                             </div>
                         </div>
 
-                        {(view === 'email' || view === 'artifact') && (
-                            <div className={styles.emailSymbolOverlay}>
-                                <Mail size={80} strokeWidth={1.5} />
-                            </div>
-                        )}
+                        <div className={styles.emailSymbolOverlay}>
+                            <Mail size={80} strokeWidth={1.5} />
+                        </div>
                     </div>
                 )}
 
@@ -1128,45 +1157,64 @@ export default function WorldQuiz() {
 
                 {view === 'quiz' && (
                     <>
-                        <div className={`${styles.progressContainer} ${isQuizReady ? styles.quizFadeIn : ''}`} style={{ opacity: isQuizReady ? 1 : 0 }}>
-                            {quizQuestions.map((_, index) => (
-                                <div
-                                    key={index}
-                                    className={`${styles.progressLine} ${index <= currentQuestionIndex ? styles.active : ''}`}
-                                />
-                            ))}
-                        </div>
-                        {showIdleOverlay && isQuizReady && (
-                            <div className={styles.instructionOverlay}>
-                                Choose how little <Image src={getAssetPath('/1_Quiz Planet Images/minus.png')} alt="" width={16} height={16} className={styles.instructionIcon} /> or how much <Image src={getAssetPath('/1_Quiz Planet Images/plus.png')} alt="" width={16} height={16} className={styles.instructionIcon} /> the sentence represents you.
+                        {/* Top: Progress and Question */}
+                        <div className={`${styles.topQuizLayer} ${isQuizReady ? styles.quizFadeIn : ''}`}>
+                            <div className={`${styles.progressContainer} ${isQuestionTransitioning ? styles.transitioning : ''}`}>
+                                {quizQuestions.map((_, index) => (
+                                    <div
+                                        key={index}
+                                        className={`${styles.progressLine} ${index <= currentQuestionIndex ? styles.active : ''}`}
+                                    />
+                                ))}
                             </div>
-                        )}
-                        <h2
-                            className={`${styles.questionTitle} ${isTitleFading ? styles.questionTitleFading : ''} ${isQuizReady ? styles.quizFadeIn : ''}`}
-                            style={{
-                                fontSize: (currentQuestion?.statement?.length || 0) > 80 ? '1.2rem' : '1.5rem',
-                                transition: 'opacity 0.4s ease',
-                                opacity: isQuizReady ? 1 : 0
-                            }}
-                        >
-                            {currentQuestion.statement}
-                        </h2>
-
-                        <div
-                            className={styles.activeOptionDisplay}
-                            style={{ '--glow-color': currentGlowColor } as React.CSSProperties}
-                        >
-                            {/* The planet visual is now handled by globalPlanetContainer */}
+                            <h2
+                                className={`${styles.questionTitle} ${isQuestionTransitioning ? styles.fadeOut : styles.fadeIn}`}
+                                style={{
+                                    fontSize: (currentQuestion?.statement?.length || 0) > 80 ? '1.2rem' : '1.5rem'
+                                }}
+                            >
+                                {currentQuestion.statement}
+                            </h2>
                         </div>
 
-                        <div className={styles.overlayContainer}>
-                            {/* Drag to start overlay removed as per user request */}
+                        {/* Center: Global Planet Visual */}
+                        <div className={styles.centerQuizLayer}>
+                            <div
+                                className={`${styles.globalPlanetContainer} ${styles.globalPlanetVisible}`}
+                                style={{ '--glow-color': currentGlowColor } as React.CSSProperties}
+                            >
+                                <div className={styles.planetVisual}>
+                                    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+                                        <Suspense fallback={<div className={styles.planetLoaderPlaceholder}>Establishing Connection...</div>}>
+                                            <Planet3D
+                                                ref={planet3DRef}
+                                                values={elementOptions.map(opt => elementValues[opt.id])}
+                                                currentSection={currentQuestion ? elementOptions.findIndex(e => e.id === currentQuestion.element.id) : -1}
+                                                tintColor={tintInfo.color}
+                                                tintOpacity={tintInfo.opacity}
+                                            />
+                                        </Suspense>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
-                        <div className={styles.quizInstructionsContainer} style={{ opacity: 0, height: 0, overflow: 'hidden' }}>
-                            {/* Hidden slider logic remains for state preservation */}
-                            <div className={styles.sliderContainer}>
-                                <div className={styles.logoSliderWrapper}>
+                        {/* Bottom: Instructions, Descriptors, Slider, and Buttons */}
+                        <div className={`${styles.bottomQuizLayer} ${isQuizReady ? styles.quizFadeIn : ''}`}>
+                            <div className={`${styles.unifiedTextContainer} ${isQuestionTransitioning ? styles.fadeOut : styles.fadeIn}`}>
+                                <div className={`${styles.descriptorText} ${getDescriptorText(currentQuestionIndex, sliderValue) ? styles.active : styles.hidden}`}>
+                                    {getDescriptorText(currentQuestionIndex, sliderValue)}
+                                </div>
+                                <div className={`${styles.instructionOverlay} ${(!getDescriptorText(currentQuestionIndex, sliderValue) && showIdleOverlay && isQuizReady) ? styles.active : styles.hidden}`}>
+                                    <div>Move with the slider</div>
+                                    <div><ArrowLeft className={`${styles.instructionIcon} ${styles.instructionIconLeft}`} /> how little or how much <ArrowRight className={`${styles.instructionIcon} ${styles.instructionIconRight}`} /></div>
+                                    <div>the sentence represents you.</div>
+                                </div>
+                            </div>
+
+                            <div className={`${styles.sliderContainerVisible} ${isQuestionTransitioning ? styles.fadeOut : styles.fadeIn}`}>
+                                <div className={styles.logoSliderWrapper} style={{ '--slider-value': sliderValue } as React.CSSProperties}>
+                                    <div className={styles.sliderPercentage}>{sliderValue}%</div>
                                     <input
                                         type="range"
                                         min="0"
@@ -1174,7 +1222,7 @@ export default function WorldQuiz() {
                                         step="1"
                                         value={sliderValue}
                                         onChange={handleSliderChange}
-                                        className={styles.logoSlider}
+                                        className={styles.logoSliderInteractable}
                                         style={{
                                             '--glow-color': currentGlowColor,
                                             '--thumb-image': `url('${getAssetPath('/Logo color.png')}')`
@@ -1184,24 +1232,21 @@ export default function WorldQuiz() {
                                     <div className={styles.sliderTrackLine} />
                                 </div>
                             </div>
-                        </div>
 
-                        <div className={`${styles.quizControlsContainer} ${isQuizReady ? styles.quizFadeIn : ''}`} style={{ opacity: isQuizReady ? 1 : 0 }}>
-                            <div className={styles.quizButtonGroup}>
-                                <button className={styles.quizControlBtn} onClick={() => handleQuizButtonClick('minusminus')} aria-label="Large Decrease">
-                                    <Image src={getAssetPath('/1_Quiz Planet Images/minusminus.png')} alt="--" width={60} height={60} />
+                            <div className={styles.quizNavigationButtons}>
+                                <button
+                                    className={`${styles.navControlBtn} ${currentQuestionIndex === 0 ? styles.unclickable : ''} ${isQuestionTransitioning ? styles.transitioning : ''}`}
+                                    onClick={() => !isQuestionTransitioning && handleBackQuestion()}
+                                    disabled={currentQuestionIndex === 0 || isQuestionTransitioning}
+                                >
+                                    <ArrowLeft /> Back
                                 </button>
-                                <button className={styles.quizControlBtn} onClick={() => handleQuizButtonClick('minus')} aria-label="Decrease">
-                                    <Image src={getAssetPath('/1_Quiz Planet Images/minus.png')} alt="-" width={60} height={60} />
-                                </button>
-                                <button className={styles.quizControlBtn} onClick={() => handleQuizButtonClick('middle')} aria-label="Center">
-                                    <Image src={getAssetPath('/1_Quiz Planet Images/middle.png')} alt="o" width={60} height={60} />
-                                </button>
-                                <button className={styles.quizControlBtn} onClick={() => handleQuizButtonClick('plus')} aria-label="Increase">
-                                    <Image src={getAssetPath('/1_Quiz Planet Images/plus.png')} alt="+" width={60} height={60} />
-                                </button>
-                                <button className={styles.quizControlBtn} onClick={() => handleQuizButtonClick('plusplus')} aria-label="Large Increase">
-                                    <Image src={getAssetPath('/1_Quiz Planet Images/plusplus.png')} alt="++" width={60} height={60} />
+                                <button
+                                    className={`${styles.navControlBtn} ${styles.primary} ${isQuestionTransitioning ? styles.transitioning : ''}`}
+                                    onClick={() => !isQuestionTransitioning && handleNextQuestion()}
+                                    disabled={isQuestionTransitioning}
+                                >
+                                    {currentQuestionIndex === quizQuestions.length - 1 ? 'Finish' : 'Next question'} <ArrowRight />
                                 </button>
                             </div>
                         </div>
@@ -1388,6 +1433,6 @@ export default function WorldQuiz() {
                     </div>
                 )}
             </div>
-        </section>
+        </section >
     );
 }
