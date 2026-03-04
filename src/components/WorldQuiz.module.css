@@ -2222,3 +2222,74 @@
         width: auto;
     }
 }
+
+/* Persistent Corner Export Button Container */
+.cornerControlsContainer {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-end;
+}
+
+.cornerExportBtn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0.6rem 1.2rem;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    border: 1.5px solid rgba(255, 255, 255, 0.2);
+    border-radius: 50px;
+    color: white;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+.cornerExportBtn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.5);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+.cornerExportBtn svg {
+    opacity: 0.9;
+}
+
+.holeBtn {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.3) 0%, rgba(139, 92, 246, 0.3) 100%);
+    border-color: rgba(139, 92, 246, 0.4);
+}
+
+.ringBtn {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.3) 0%, rgba(5, 150, 105, 0.3) 100%);
+    border-color: rgba(16, 185, 129, 0.4);
+}
+
+.holeIcon,
+.ringIcon {
+    filter: brightness(0) invert(1);
+    opacity: 0.9;
+}
+
+@media (max-width: 600px) {
+    .cornerControlsContainer {
+        top: 15px;
+        right: 15px;
+        gap: 8px;
+    }
+
+    .cornerExportBtn {
+        padding: 0.5rem 0.8rem;
+    }
+
+    .exportBtnText {
+        display: none;
+    }
+}
