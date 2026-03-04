@@ -200,30 +200,45 @@ const cloudVertexShader = `
         #include <begin_vertex>
         #include <morphtarget_vertex>
         
-        // Stormy shaking effect
-        if (uStorm > 0.0) {
-            float noise = snoise(vec3(transformed.xy * 25.0, uTime * 20.0));
-            transformed += normal * noise * 0.12 * uStorm;
-            
-            // Randomized jitter (Faster and stronger)
-            transformed.x += sin(uTime * 40.0 + transformed.y) * 0.05 * uStorm;
-            transformed.y += cos(uTime * 35.0 + transformed.x) * 0.05 * uStorm;
-        }
-
         #include <project_vertex>
         vPos = transformed;
     }
 `;
 
 const cloudFragmentShader = `
+    uniform float uTime;
     uniform float uStorm;
     varying vec2 vUv;
+    varying vec3 vPos;
+
+    ${noisePars}
+
     void main() {
-        // Transition from Stormy Grey (0.4) to Clean White (1.0)
-        float brightness = mix(1.0, 0.45, uStorm);
-        vec3 color = vec3(brightness);
+        // Base color starts as pure white
+        vec3 color = vec3(1.0);
         
-        float alpha = mix(0.8, 0.9, uStorm); // Slightly more opaque when stormy
+        // Smoky effect: slow-moving noise that darkens slightly as uStorm increases
+        float smoke = snoise(vec3(vUv * 4.0, uTime * 0.2)) * 0.5 + 0.5;
+        // At uStorm:1.0 (slider:0%), color can dip to ~0.75 for a "cloudy/greyish" look
+        float smokeAmount = mix(1.0, 0.75 + 0.25 * smoke, uStorm);
+        color *= smokeAmount;
+
+        if (uStorm > 0.01) {
+            // Flash frequency is much lower and more intermittent
+            float flashFreq = 0.3 + (uStorm * 1.2);
+            
+            // Sharp peaks but very intermittent using noise gating
+            float flash = pow(max(0.0, sin(uTime * flashFreq + vUv.y * 3.0)), 60.0);
+            
+            // Spatial variance
+            float noiseVal = fract(sin(dot(vUv * 0.1, vec2(12.9898, 78.233))) * 43758.5453);
+            flash *= (0.5 + 0.5 * noiseVal);
+            
+            // Intensity of lightning glimpses
+            color += flash * 2.5 * uStorm;
+        }
+        
+        float alpha = mix(0.85, 0.95, uStorm * 0.5); // Slightly denser when stormy
         gl_FragColor = vec4(color, alpha);
     }
 `;
@@ -795,43 +810,36 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
         return forestGLTF.scene.clone();
     }, [forestGLTF]);
 
+
     const cometInstances = useMemo(() => {
-        const templates: THREE.Mesh[] = [];
-        cometTemplateScene.traverse((child) => {
-            if ((child as THREE.Mesh).isMesh) {
-                templates.push(child as THREE.Mesh);
-            }
-        });
-
-        // Error handling if meshes not found
-        if (templates.length === 0) return [];
-
-        const instances: THREE.Mesh[] = [];
-        const count = 8;
-        const radius = 220; // Maintain FBX-relative distance
+        const instances: THREE.Group[] = [];
+        const count = 10;
+        const radius = 300; // Increased from 220 to ensure they are outside the planet surface
 
         for (let i = 0; i < count; i++) {
-            // Pick one of the 2 meshes from the GLB
-            const template = templates[i % templates.length];
-            const mesh = template.clone();
+            // Clone the entire template scene as a group
+            const group = cometTemplateScene.clone();
 
             // Random distribution around the sphere
             const theta = Math.acos((Math.random() * 2) - 1);
             const phi = Math.random() * Math.PI * 2;
 
-            mesh.position.set(
+            group.position.set(
                 radius * Math.sin(theta) * Math.cos(phi),
                 radius * Math.sin(theta) * Math.sin(phi),
                 radius * Math.cos(theta)
             );
 
             // Make them look at center
-            mesh.lookAt(0, 0, 0);
+            group.lookAt(0, 0, 0);
 
-            // Name them for sequential reveal logic
-            mesh.name = `OpenToExp_${i + 1}`;
+            // Store original random position in userData for resetting later
+            group.userData.originalPos = new THREE.Vector3().copy(group.position);
 
-            instances.push(mesh);
+            // Name the group for sequential reveal logic
+            group.name = `OpenToExpGroup_${i + 1}`;
+
+            instances.push(group);
         }
         return instances;
     }, [cometTemplateScene]);
@@ -918,13 +926,7 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
     }, [cloudsFBX]);
 
     const cometMeshCache = useMemo(() => {
-        const meshes: THREE.Mesh[] = [];
-        cometInstances.forEach(inst => {
-            inst.traverse(child => {
-                if ((child as THREE.Mesh).isMesh) meshes.push(child as THREE.Mesh);
-            });
-        });
-        return meshes;
+        return cometInstances;
     }, [cometInstances]);
 
     // Removed useEffect for Forest Geometry
@@ -1573,52 +1575,6 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
         }
     });
 
-    useFrame((state) => {
-        if (cometRef.current) {
-            const time = state.clock.elapsedTime;
-
-            // Visibility logic: Show comets starting from Q4 and keep them visible
-            const cometsVisible = currentSection >= 3;
-
-            cometMeshCache.forEach((mesh) => {
-                mesh.visible = cometsVisible;
-
-                // Assign material distribution: 1-4 Bluish, 5-8 Magma
-                const cometMatch = mesh.name.match(/OpenToExp_(\d+)/);
-                if (cometMatch) {
-                    const idxNum = parseInt(cometMatch[1]);
-                    mesh.material = idxNum <= 4 ? ringMaterials.Comet_optimized_1 : ringMaterials.Comet_optimized_2;
-                }
-                mesh.scale.set(80, 80, 80);
-
-                // Time animation
-                if (mesh.material && (mesh.material as any).uniforms?.uTime) {
-                    (mesh.material as any).uniforms.uTime.value = time;
-                }
-
-                // Morph target sequential logic
-                if (mesh.visible && mesh.morphTargetInfluences && mesh.morphTargetDictionary) {
-                    const idx = mesh.morphTargetDictionary['high'];
-                    if (idx !== undefined) {
-                        let targetValue = 0;
-                        const p = values[3] / 100;
-
-                        const cometMatchInner = mesh.name.match(/OpenToExp_(\d+)/);
-                        if (cometMatchInner) {
-                            const cometIndex = parseInt(cometMatchInner[1]);
-                            if (cometIndex >= 1 && cometIndex <= 8) {
-                                const startThreshold = (cometIndex - 1) * 0.1;
-                                targetValue = Math.max(0.0, Math.min(1.0, (p - startThreshold) / 0.1));
-                            }
-                        }
-
-                        mesh.morphTargetInfluences[idx] = targetValue;
-                    }
-                }
-            });
-        }
-    });
-
     const cloudMapping = useMemo(() => {
         const intervals = [
             [0.00, 0.15],
@@ -1630,7 +1586,6 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
             [0.75, 0.95],
             [0.85, 1.00]
         ];
-
         // Shuffle intervals to randomize which cloud disappears when
         const shuffled = [...intervals].sort(() => Math.random() - 0.5);
 
@@ -1642,11 +1597,104 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
     }, []);
 
     useFrame((state) => {
+        const time = state.clock.elapsedTime;
+
+        // --- Comet logic ---
+        if (cometRef.current) {
+            const curiousValue = values[3] || 0;
+
+            let cometCount = 0;
+            let cometMat = ringMaterials.Comet_optimized_1;
+            let targetMeshTag = "optimized_1";
+            let cometScale = 75;
+
+            if (curiousValue >= 50.1) { // High Curiosity: Blue Comets
+                cometMat = ringMaterials.Comet_optimized_1;
+                targetMeshTag = "optimized_1";
+                cometScale = 75;
+                // Scale from 2 (at 51%) up to 6 (at 100%)
+                cometCount = 2 + Math.floor(((curiousValue - 50.1) / 49.9) * 4.99);
+            } else if (curiousValue <= 49.9) { // Low Curiosity: Magma Comets
+                cometMat = ringMaterials.Comet_optimized_2;
+                targetMeshTag = "optimized_2";
+                cometScale = 110;
+                // 49.9% -> 1, 0% -> 3
+                cometCount = Math.max(1, 1 + Math.floor(((49.9 - curiousValue) / 50.0) * 2.99));
+            } else {
+                cometCount = 0; // Exactly 0 at 50% threshold
+            }
+
+            cometMeshCache.forEach((group, idx) => {
+                const isGroupVisible = currentSection > 3 || (currentSection === 3 && idx < cometCount);
+                group.visible = isGroupVisible;
+
+                if (isGroupVisible) {
+                    // Specific positioning for Magma Comets:
+                    if (targetMeshTag === "optimized_2") {
+                        // EDIT THESE ARRAYS TO CHANGE INDIVIDUAL MAGMA COMET POSITIONS
+                        const magmaRadii = [200, 800, 180];
+                        const magmaElevations = [
+                            Math.PI / 5.8,   // Comet 1: 64 deg
+                            Math.PI / 2.001, // Comet 2: 89.9 deg (Absolute Top)
+                            Math.PI / 2.0    // Comet 3: 45 deg
+                        ];
+                        const magmaAngles = [
+                            (10 * Math.PI / -360),   // Comet 1 (your latest edit)
+                            (50 * Math.PI / 140), // Comet 2
+                            (200 * Math.PI / 1) + Math.PI // Comet 3 (auto-spaced)
+                        ];
+
+                        const radius = magmaRadii[idx % 3];
+                        const elevation = magmaElevations[idx % 3];
+                        const angle = magmaAngles[idx % 3];
+
+                        const hRadius = radius * Math.cos(elevation);
+                        group.position.set(
+                            hRadius * Math.cos(angle),
+                            radius * Math.sin(elevation),
+                            hRadius * Math.sin(angle)
+                        );
+                        group.lookAt(0, 0, 0);
+                    } else if (group.userData.originalPos) {
+                        // Revert to random for model 1
+                        group.position.copy(group.userData.originalPos);
+                        group.lookAt(0, 0, 0);
+                    }
+                    group.traverse((child) => {
+                        const mesh = child as THREE.Mesh;
+                        if (mesh.isMesh) {
+                            // Robust match regardless of singular/plural naming
+                            const name = mesh.name.toLowerCase();
+                            const isTargetMesh = name.includes(targetMeshTag);
+                            mesh.visible = isTargetMesh;
+
+                            if (isTargetMesh) {
+                                mesh.material = cometMat;
+                                mesh.scale.set(cometScale, cometScale, cometScale);
+
+                                if (mesh.material && (mesh.material as any).uniforms?.uTime) {
+                                    (mesh.material as any).uniforms.uTime.value = time;
+                                }
+
+                                // Morph target: Always 1.0 for these comets as requested
+                                if (mesh.morphTargetInfluences && mesh.morphTargetDictionary) {
+                                    const morphIdx = mesh.morphTargetDictionary['high'];
+                                    if (morphIdx !== undefined) {
+                                        mesh.morphTargetInfluences[morphIdx] = 1.0;
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+            });
+        }
+
+        // --- Cloud logic ---
         if (cloudsRef.current) {
-            // Visibility logic: Show clouds ONLY in Q5
             const cloudsVisible = currentSection === 4;
             const p = (values[4] || 0) / 100;
-            const stormIntensity = Math.max(0.0, 1.0 - (p / 0.49)); // 1.0 at 0%, 0.0 at 49%
+            const stormIntensity = Math.max(0.0, 1.0 - (p / 0.49));
 
             cloudsRef.current.traverse((child) => {
                 if ((child as any).isMesh) {
@@ -1655,16 +1703,13 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
                     mesh.scale.set(100, 100, 100);
                     mesh.material = ringMaterials.cloud;
 
-                    // Update uniforms
                     if (mesh.material instanceof THREE.ShaderMaterial) {
-                        mesh.material.uniforms.uTime.value = state.clock.elapsedTime;
+                        mesh.material.uniforms.uTime.value = time;
                         mesh.material.uniforms.uStorm.value = stormIntensity;
                     }
 
                     const name = mesh.name;
                     let targetVal = 1.0;
-
-                    // Apply randomized mapping logic
                     const interval = cloudMapping[name];
                     if (interval) {
                         const [start, end] = interval;
@@ -1678,15 +1723,14 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
                         }
                     }
 
-                    // Hide mesh completely if morph is 0 to save performance
                     if (targetVal <= 0.001) mesh.visible = false;
                 }
             });
         }
 
-        // Constant slow rotation for the whole planet
+        // --- Rotation logic ---
         if (planetAssemblyRef.current) {
-            planetAssemblyRef.current.rotation.y += 0.002; // Very slow and steady
+            planetAssemblyRef.current.rotation.y += 0.002;
         }
     });
 
