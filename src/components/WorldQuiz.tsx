@@ -419,7 +419,7 @@ export default function WorldQuiz() {
 
     // handleQuizButtonClick removed
 
-    const handleDownloadSTL = async (exportMode: 'standard' | 'hole' | 'ring' | 'ring_hole' | 'four_holes' = 'standard') => {
+    const handleDownloadSTL = async (exportMode: 'standard' | 'hole' | 'ring' | 'ring_hole' | 'four_holes' | 'flat' = 'standard') => {
         const withHole = exportMode === 'hole';
         const standardHoleRadius = 2.8;
         const ringHoleRadius = 2.4;
@@ -559,7 +559,7 @@ export default function WorldQuiz() {
             return x * x * (3 - 2 * x); // smoothstep
         };
 
-        const bakeMesh = (mesh: THREE.Mesh, planetWorldMatrix: THREE.Matrix4, withTwoHoles?: { r: number, xOffset: number, onlyTop?: boolean }, planetRadius?: number): THREE.BufferGeometry | null => {
+        const bakeMesh = (mesh: THREE.Mesh, planetWorldMatrix: THREE.Matrix4, withTwoHoles?: { r: number, xOffset: number, onlyTop?: boolean }, planetRadius?: number, flatBase?: boolean): THREE.BufferGeometry | null => {
             const planetInv = planetWorldMatrix.clone().invert();
             if (!mesh.geometry || !mesh.visible) return null;
 
@@ -590,7 +590,7 @@ export default function WorldQuiz() {
                 const seedQ2 = new THREE.Vector3(0.8, -0.5, 0.3);
 
                 const dict = mesh.morphTargetDictionary || {};
-                const typeMap: Record<number, number> = {}; 
+                const typeMap: Record<number, number> = {};
                 for (const key in dict) {
                     const k = key.toLowerCase();
                     const idx = dict[key];
@@ -618,7 +618,7 @@ export default function WorldQuiz() {
                             if (isPlanet && type !== undefined) {
                                 if (type === 0) weight = maskD; else if (type === 1) weight = maskO;
                                 else if (type === 2) weight = maskV; else if (type === 3) weight = maskF;
-                                weight *= 1.8; 
+                                weight *= 1.8;
                             }
                             if (weight > 0.001) {
                                 morphPos.fromBufferAttribute(morphTargets[j], i);
@@ -743,943 +743,994 @@ export default function WorldQuiz() {
                 }
             }
 
+            if (flatBase && planetRadius) {
+                const cutY = - 0.85 * planetRadius;
+                for (let i = 0; i < posAttr.count; i += 3) {
+                    const v1 = new THREE.Vector3().fromBufferAttribute(posAttr, i);
+                    const v2 = new THREE.Vector3().fromBufferAttribute(posAttr, i + 1);
+                    const v3 = new THREE.Vector3().fromBufferAttribute(posAttr, i + 2);
+
+                    const v1P = v1.clone().applyMatrix4(worldMatrix).applyMatrix4(planetInv);
+                    const v2P = v2.clone().applyMatrix4(worldMatrix).applyMatrix4(planetInv);
+                    const v3P = v3.clone().applyMatrix4(worldMatrix).applyMatrix4(planetInv);
+
+                    const in1 = v1P.y < cutY, in2 = v2P.y < cutY, in3 = v3P.y < cutY;
+
+                    if (in1 && in2 && in3) {
+                        // Remove face entirely
+                        posAttr.setXYZ(i, 0, 0, 0);
+                        posAttr.setXYZ(i + 1, 0, 0, 0);
+                        posAttr.setXYZ(i + 2, 0, 0, 0);
+                    } else if (in1 || in2 || in3) {
+                        // Snap low vertices to cutY to create circular opening
+                        if (in1) v1P.y = cutY;
+                        if (in2) v2P.y = cutY;
+                        if (in3) v3P.y = cutY;
+
+                        v1.copy(v1P).applyMatrix4(planetWorldMatrix).applyMatrix4(worldMatrix.clone().invert());
+                        v2.copy(v2P).applyMatrix4(planetWorldMatrix).applyMatrix4(worldMatrix.clone().invert());
+                        v3.copy(v3P).applyMatrix4(planetWorldMatrix).applyMatrix4(worldMatrix.clone().invert());
+
+                        posAttr.setXYZ(i, v1.x, v1.y, v1.z);
+                        posAttr.setXYZ(i + 1, v2.x, v2.y, v2.z);
+                        posAttr.setXYZ(i + 2, v3.x, v3.y, v3.z);
+                    }
+                }
+            }
+
             if (mesh.geometry.index) rawGeo.dispose();
             geometry.applyMatrix4(worldMatrix);
             return geometry;
         };
-    const geometries: THREE.BufferGeometry[] = [];
+        const geometries: THREE.BufferGeometry[] = [];
 
-    // --- 1. PRE-CALCULATE RELIABLE PLANET RADIUS ---
-    let localPlanetRadius = 10;
-    let planetWorldMatrix = new THREE.Matrix4();
-    scene.traverse((child) => {
-        const cName = child.name.toLowerCase();
-        const isPlanetMesh = (cName === 'planet_base' || cName === 'planet_base_mesh' || cName.includes('planet_base')) && (child as THREE.Mesh).isMesh;
-        if (isPlanetMesh) {
-            const meshChild = child as THREE.Mesh;
-            meshChild.updateMatrixWorld(true);
-            planetWorldMatrix.copy(meshChild.matrixWorld);
+        // --- 1. PRE-CALCULATE RELIABLE PLANET RADIUS ---
+        let localPlanetRadius = 10;
+        let planetWorldMatrix = new THREE.Matrix4();
+        scene.traverse((child) => {
+            const cName = child.name.toLowerCase();
+            const isPlanetMesh = (cName === 'planet_base' || cName === 'planet_base_mesh' || cName.includes('planet_base')) && (child as THREE.Mesh).isMesh;
+            if (isPlanetMesh) {
+                const meshChild = child as THREE.Mesh;
+                meshChild.updateMatrixWorld(true);
+                planetWorldMatrix.copy(meshChild.matrixWorld);
 
-            // Robust radius: ignore bounding sphere quirks, use vertex sampling
-            const pos = meshChild.geometry.attributes.position;
-            if (pos) {
-                let sumR = 0;
-                const sampleCount = Math.min(pos.count, 500);
-                for (let i = 0; i < sampleCount; i++) {
-                    sumR += Math.sqrt(pos.getX(i) ** 2 + pos.getY(i) ** 2 + pos.getZ(i) ** 2);
+                // Robust radius: ignore bounding sphere quirks, use vertex sampling
+                const pos = meshChild.geometry.attributes.position;
+                if (pos) {
+                    let sumR = 0;
+                    const sampleCount = Math.min(pos.count, 500);
+                    for (let i = 0; i < sampleCount; i++) {
+                        sumR += Math.sqrt(pos.getX(i) ** 2 + pos.getY(i) ** 2 + pos.getZ(i) ** 2);
+                    }
+                    localPlanetRadius = sumR / sampleCount;
                 }
-                localPlanetRadius = sumR / sampleCount;
             }
-        }
-    });
+        });
 
-    // --- 2. BAKE ALL MESHES (with flattening) ---
-    scene.traverse((child) => {
-        const cName = child.name.toLowerCase();
-        const isMesh = (child as THREE.Mesh).isMesh;
-        const isExclusion = child.name.startsWith('exclusion_');
-        const isComet = cName.includes('comet_optimized') || cName.includes('comet_single');
+        // --- 2. BAKE ALL MESHES (with flattening) ---
+        scene.traverse((child) => {
+            const cName = child.name.toLowerCase();
+            const isMesh = (child as THREE.Mesh).isMesh;
+            const isExclusion = child.name.startsWith('exclusion_');
+            const isComet = cName.includes('comet_optimized') || cName.includes('comet_single');
 
-        if (isMesh && (!isExclusion || isComet)) {
-            const meshChild = child as THREE.Mesh;
-            const baked = bakeMesh(meshChild, planetWorldMatrix, undefined, localPlanetRadius);
-            if (baked) geometries.push(baked);
-        }
-    });
+            if (isMesh && (!isExclusion || isComet)) {
+                const meshChild = child as THREE.Mesh;
+                const baked = bakeMesh(meshChild, planetWorldMatrix, undefined, localPlanetRadius, exportMode === 'flat');
+                if (baked) geometries.push(baked);
+            }
+        });
 
-    if (exportMode === 'ring' || exportMode === 'ring_hole' || exportMode === 'four_holes') {
-        if (exportMode === 'ring_hole' || exportMode === 'four_holes') {
-            const holeRadius = ringHoleRadius;
-            const halfGap = 1.8;
-            const xOffset = holeRadius + halfGap;
-            const onlyTop = exportMode === 'ring_hole';
+        if (exportMode === 'ring' || exportMode === 'ring_hole' || exportMode === 'four_holes') {
+            if (exportMode === 'ring_hole' || exportMode === 'four_holes') {
+                const holeRadius = ringHoleRadius;
+                const halfGap = 1.8;
+                const xOffset = holeRadius + halfGap;
+                const onlyTop = exportMode === 'ring_hole';
+                geometries.length = 0; // Clear standard bake
+                scene.traverse((child) => {
+                    const cName = child.name.toLowerCase();
+                    const isMesh = (child as THREE.Mesh).isMesh;
+                    const isExclusion = child.name.startsWith('exclusion_');
+                    const isComet = cName.includes('comet_optimized') || cName.includes('comet_single');
 
-            geometries.length = 0; // Clear standard bake
-            scene.traverse((child) => {
-                const cName = child.name.toLowerCase();
-                const isMesh = (child as THREE.Mesh).isMesh;
-                const isExclusion = child.name.startsWith('exclusion_');
-                const isComet = cName.includes('comet_optimized') || cName.includes('comet_single');
+                    if (isMesh && (!isExclusion || isComet)) {
+                        const baked = bakeMesh(child as THREE.Mesh, planetWorldMatrix, { r: holeRadius, xOffset, onlyTop }, localPlanetRadius);
+                        if (baked) geometries.push(baked);
+                    }
+                });
+            }
+            else {
+                // Export Mode: Ring (Additive)
+                const loader = new FBXLoader();
+                const ringModels = ['/models/anilla.fbx'];
 
-                if (isMesh && (!isExclusion || isComet)) {
-                    const baked = bakeMesh(child as THREE.Mesh, planetWorldMatrix, { r: holeRadius, xOffset, onlyTop }, localPlanetRadius);
-                    if (baked) geometries.push(baked);
-                }
-            });
-        }
-        else {
-            // Export Mode: Ring (Additive)
-            const loader = new FBXLoader();
-            const ringModels = ['/models/anilla.fbx'];
+                let planetMaxY = 0;
+                geometries.forEach(geo => {
+                    geo.computeBoundingBox();
+                    if (geo.boundingBox) {
+                        planetMaxY = Math.max(planetMaxY, geo.boundingBox.max.y);
+                    }
+                });
 
-            let planetMaxY = 0;
-            geometries.forEach(geo => {
-                geo.computeBoundingBox();
-                if (geo.boundingBox) {
-                    planetMaxY = Math.max(planetMaxY, geo.boundingBox.max.y);
-                }
-            });
+                for (const modelPath of ringModels) {
+                    try {
+                        const ringGroup = await new Promise<THREE.Group>((resolve, reject) => {
+                            loader.load(getAssetPath(modelPath), resolve, undefined, reject);
+                        });
 
-            for (const modelPath of ringModels) {
-                try {
-                    const ringGroup = await new Promise<THREE.Group>((resolve, reject) => {
-                        loader.load(getAssetPath(modelPath), resolve, undefined, reject);
-                    });
+                        let targetRingProcessed = false;
+                        ringGroup.traverse((child) => {
+                            if ((child as THREE.Mesh).isMesh && !targetRingProcessed) {
+                                const mesh = child as THREE.Mesh;
+                                const isTargetMesh = mesh.name.toLowerCase().includes('anilla') ||
+                                    mesh.name.toLowerCase().includes('ring') ||
+                                    ringGroup.children.length === 1;
 
-                    let targetRingProcessed = false;
-                    ringGroup.traverse((child) => {
-                        if ((child as THREE.Mesh).isMesh && !targetRingProcessed) {
-                            const mesh = child as THREE.Mesh;
-                            const isTargetMesh = mesh.name.toLowerCase().includes('anilla') ||
-                                mesh.name.toLowerCase().includes('ring') ||
-                                ringGroup.children.length === 1;
+                                if (isTargetMesh) {
+                                    targetRingProcessed = true;
+                                    const ringGeo = mesh.geometry.clone();
+                                    mesh.updateMatrixWorld(true);
+                                    ringGeo.applyMatrix4(mesh.matrixWorld);
 
-                            if (isTargetMesh) {
-                                targetRingProcessed = true;
-                                const ringGeo = mesh.geometry.clone();
-                                mesh.updateMatrixWorld(true);
-                                ringGeo.applyMatrix4(mesh.matrixWorld);
+                                    ringGeo.computeBoundingBox();
+                                    const center = new THREE.Vector3();
+                                    ringGeo.boundingBox?.getCenter(center);
+                                    ringGeo.applyMatrix4(new THREE.Matrix4().makeTranslation(-center.x, -center.y, -center.z));
 
-                                ringGeo.computeBoundingBox();
-                                const center = new THREE.Vector3();
-                                ringGeo.boundingBox?.getCenter(center);
-                                ringGeo.applyMatrix4(new THREE.Matrix4().makeTranslation(-center.x, -center.y, -center.z));
+                                    ringGeo.computeBoundingBox();
+                                    const size = new THREE.Vector3();
+                                    ringGeo.boundingBox?.getSize(size);
+                                    const currentMaxDim = Math.max(size.x, size.y, size.z);
+                                    const targetSize = 1.6;
+                                    const scaleFactor = targetSize / currentMaxDim;
+                                    ringGeo.applyMatrix4(new THREE.Matrix4().makeScale(scaleFactor, scaleFactor, scaleFactor));
 
-                                ringGeo.computeBoundingBox();
-                                const size = new THREE.Vector3();
-                                ringGeo.boundingBox?.getSize(size);
-                                const currentMaxDim = Math.max(size.x, size.y, size.z);
-                                const targetSize = 1.6;
-                                const scaleFactor = targetSize / currentMaxDim;
-                                ringGeo.applyMatrix4(new THREE.Matrix4().makeScale(scaleFactor, scaleFactor, scaleFactor));
+                                    ringGeo.applyMatrix4(new THREE.Matrix4().makeRotationX(Math.PI / 2));
 
-                                ringGeo.applyMatrix4(new THREE.Matrix4().makeRotationX(Math.PI / 2));
+                                    const finalY = planetMaxY + 0.5;
+                                    ringGeo.applyMatrix4(new THREE.Matrix4().makeTranslation(0, finalY, 0));
 
-                                const finalY = planetMaxY + 0.5;
-                                ringGeo.applyMatrix4(new THREE.Matrix4().makeTranslation(0, finalY, 0));
-
-                                const nonIndexed = ringGeo.toNonIndexed();
-                                const finalRingGeo = new THREE.BufferGeometry();
-                                finalRingGeo.setAttribute('position', nonIndexed.attributes.position.clone());
-                                geometries.push(finalRingGeo);
-                                nonIndexed.dispose();
-                                ringGeo.dispose();
+                                    const nonIndexed = ringGeo.toNonIndexed();
+                                    const finalRingGeo = new THREE.BufferGeometry();
+                                    finalRingGeo.setAttribute('position', nonIndexed.attributes.position.clone());
+                                    geometries.push(finalRingGeo);
+                                    nonIndexed.dispose();
+                                    ringGeo.dispose();
+                                }
                             }
-                        }
-                    });
-                } catch (err) {
-                    console.warn(`Failed to process model ${modelPath}:`, err);
+                        });
+                    } catch (err) {
+                        console.warn(`Failed to process model ${modelPath}:`, err);
+                    }
                 }
             }
         }
-    }
 
-    if (geometries.length === 0) return;
+        if (geometries.length === 0) return;
 
-    // --- ADD TUNNEL GEOMETRY ---
-    if (withHole || exportMode === 'ring_hole' || exportMode === 'four_holes') {
-        const hRadius = withHole ? standardHoleRadius : ringHoleRadius;
-        const xOff = (exportMode === 'ring_hole' || exportMode === 'four_holes') ? (hRadius + 1.8) : 0;
+        // --- ADD TUNNEL GEOMETRY ---
+        if (withHole || exportMode === 'ring_hole' || exportMode === 'four_holes') {
+            const hRadius = withHole ? standardHoleRadius : ringHoleRadius;
+            const xOff = (exportMode === 'ring_hole' || exportMode === 'four_holes') ? (hRadius + 1.8) : 0;
 
-        if (exportMode === 'ring_hole' || exportMode === 'four_holes') {
-            // --- TORUS ARCH BRIDGE (2-Hole or 4-Hole Mode) ---
-            const hHalf = Math.sqrt(Math.max(0, localPlanetRadius ** 2 - (xOff + hRadius) ** 2));
+            if (exportMode === 'ring_hole' || exportMode === 'four_holes') {
+                // --- TORUS ARCH BRIDGE (2-Hole or 4-Hole Mode) ---
+                const hHalf = Math.sqrt(Math.max(0, localPlanetRadius ** 2 - (xOff + hRadius) ** 2));
 
-            // Create one arch (top) or two (top & bottom)
-            const arches = [false];
-            if (exportMode === 'four_holes') arches.push(true);
+                // Create one arch (top) or two (top & bottom)
+                const arches = [false];
+                if (exportMode === 'four_holes') arches.push(true);
 
-            arches.forEach(isBottom => {
-                const torusGeo = new THREE.TorusGeometry(xOff, hRadius, 32, 72, Math.PI);
-                torusGeo.scale(-1, 1, 1);
+                arches.forEach(isBottom => {
+                    const torusGeo = new THREE.TorusGeometry(xOff, hRadius, 32, 72, Math.PI);
+                    torusGeo.scale(-1, 1, 1);
 
-                if (isBottom) {
-                    // BOTTOM Hem: Arch up (0 rad) starting at -hHalf
-                    torusGeo.applyMatrix4(new THREE.Matrix4().makeTranslation(0, -hHalf, 0));
-                } else {
-                    // TOP Hem: Arch down (PI rad) starting at +hHalf
-                    torusGeo.applyMatrix4(new THREE.Matrix4().makeRotationX(Math.PI));
-                    torusGeo.applyMatrix4(new THREE.Matrix4().makeTranslation(0, hHalf, 0));
-                }
+                    if (isBottom) {
+                        // BOTTOM Hem: Arch up (0 rad) starting at -hHalf
+                        torusGeo.applyMatrix4(new THREE.Matrix4().makeTranslation(0, -hHalf, 0));
+                    } else {
+                        // TOP Hem: Arch down (PI rad) starting at +hHalf
+                        torusGeo.applyMatrix4(new THREE.Matrix4().makeRotationX(Math.PI));
+                        torusGeo.applyMatrix4(new THREE.Matrix4().makeTranslation(0, hHalf, 0));
+                    }
 
-                torusGeo.applyMatrix4(planetWorldMatrix);
-                const nonIndexed = torusGeo.toNonIndexed();
+                    torusGeo.applyMatrix4(planetWorldMatrix);
+                    const nonIndexed = torusGeo.toNonIndexed();
+                    const tunnelGeo = new THREE.BufferGeometry();
+                    tunnelGeo.setAttribute('position', nonIndexed.attributes.position.clone());
+                    geometries.push(tunnelGeo);
+                    nonIndexed.dispose();
+                    torusGeo.dispose();
+                });
+            } else {
+                // --- VERTICAL CYLINDER TUNNEL (1-Hole Mode) ---
+                const hOuter = Math.sqrt(Math.max(0, localPlanetRadius ** 2 - hRadius ** 2));
+                const h = hOuter * 2;
+                const tunnelCyl = new THREE.CylinderGeometry(hRadius, hRadius, h, 72, 1, true);
+                tunnelCyl.scale(-1, 1, 1);
+                tunnelCyl.applyMatrix4(planetWorldMatrix);
+                const nonIndexed = tunnelCyl.toNonIndexed();
                 const tunnelGeo = new THREE.BufferGeometry();
                 tunnelGeo.setAttribute('position', nonIndexed.attributes.position.clone());
                 geometries.push(tunnelGeo);
                 nonIndexed.dispose();
-                torusGeo.dispose();
-            });
-        } else {
-            // --- VERTICAL CYLINDER TUNNEL (1-Hole Mode) ---
-            const hOuter = Math.sqrt(Math.max(0, localPlanetRadius ** 2 - hRadius ** 2));
-            const h = hOuter * 2;
-            const tunnelCyl = new THREE.CylinderGeometry(hRadius, hRadius, h, 72, 1, true);
-            tunnelCyl.scale(-1, 1, 1);
-            tunnelCyl.applyMatrix4(planetWorldMatrix);
-            const nonIndexed = tunnelCyl.toNonIndexed();
-            const tunnelGeo = new THREE.BufferGeometry();
-            tunnelGeo.setAttribute('position', nonIndexed.attributes.position.clone());
-            geometries.push(tunnelGeo);
-            nonIndexed.dispose();
-            tunnelCyl.dispose();
+                tunnelCyl.dispose();
+            }
         }
-    }
 
-    if (geometries.length === 0) return;
+        if (geometries.length === 0) return;
 
-    let merged = BufferGeometryUtils.mergeGeometries(geometries);
-    // Use a more aggressive weld tolerance to bridge any floating point gaps
-    merged = BufferGeometryUtils.mergeVertices(merged, 0.005);
-    merged.computeVertexNormals();
-    const finalMesh = new THREE.Mesh(merged);
+        let merged = BufferGeometryUtils.mergeGeometries(geometries);
+        // Use a more aggressive weld tolerance to bridge any floating point gaps
+        merged = BufferGeometryUtils.mergeVertices(merged, 0.005);
+        merged.computeVertexNormals();
+        const finalMesh = new THREE.Mesh(merged);
 
-    const exporter = new STLExporter();
-    const result = exporter.parse(finalMesh, { binary: true });
+        const exporter = new STLExporter();
+        const result = exporter.parse(finalMesh, { binary: true });
 
-    const blob = new Blob([result], { type: 'application/octet-stream' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    let fileName = `YourWorld3D_${new Date().getTime()}.stl`;
-    if (exportMode === 'hole') fileName = `YourWorld3D_Hole_${new Date().getTime()}.stl`;
-    if (exportMode === 'ring') fileName = `YourWorld3D_Ring_${new Date().getTime()}.stl`;
-    if (exportMode === 'ring_hole') fileName = `YourWorld3D_2Holes_${new Date().getTime()}.stl`;
-    if (exportMode === 'four_holes') fileName = `YourWorld3D_4Holes_${new Date().getTime()}.stl`;
-    link.download = fileName;
-    link.click();
+        const blob = new Blob([result], { type: 'application/octet-stream' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        let fileName = `YourWorld3D_${new Date().getTime()}.stl`;
+        if (exportMode === 'hole') fileName = `YourWorld3D_Hole_${new Date().getTime()}.stl`;
+        if (exportMode === 'ring') fileName = `YourWorld3D_Ring_${new Date().getTime()}.stl`;
+        if (exportMode === 'ring_hole') fileName = `YourWorld3D_2Holes_${new Date().getTime()}.stl`;
+        if (exportMode === 'four_holes') fileName = `YourWorld3D_4Holes_${new Date().getTime()}.stl`;
+        if (exportMode === 'flat') fileName = `YourWorld3D_FlatBase_${new Date().getTime()}.stl`;
+        link.download = fileName;
+        link.click();
 
-    geometries.forEach(g => g.dispose());
-    merged.dispose();
-};
+        geometries.forEach(g => g.dispose());
+        merged.dispose();
+    };
 
 
-// Navigation functions handle state changes
+    // Navigation functions handle state changes
 
-const handleStartQuiz = () => {
-    // Finalize assignments based on orderedTraits
-    const finalAssignments: Record<string, string> = {};
-    orderedTraits.forEach((trait, index) => {
-        finalAssignments[trait] = `Q${index + 1}`;
-    });
-    setAssignments(finalAssignments);
+    const handleStartQuiz = () => {
+        // Finalize assignments based on orderedTraits
+        const finalAssignments: Record<string, string> = {};
+        orderedTraits.forEach((trait, index) => {
+            finalAssignments[trait] = `Q${index + 1}`;
+        });
+        setAssignments(finalAssignments);
 
-    // Start 10 second loader
-    setPlanetLoading(true);
-    setPlanetProgress(0);
-    const startTime = Date.now();
-    const duration = 7000;
-    // Reduced from 10000 to accelerate transition by 3s
+        // Start 10 second loader
+        setPlanetLoading(true);
+        setPlanetProgress(0);
+        const startTime = Date.now();
+        const duration = 7000;
+        // Reduced from 10000 to accelerate transition by 3s
 
-    const interval = setInterval(() => {
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(100, Math.floor((elapsed / duration) * 100));
-        setPlanetProgress(progress);
+        const interval = setInterval(() => {
+            const elapsed = Date.now() - startTime;
+            const progress = Math.min(100, Math.floor((elapsed / duration) * 100));
+            setPlanetProgress(progress);
 
-        if (elapsed >= duration) {
-            clearInterval(interval);
-            setPlanetLoading(false);
+            if (elapsed >= duration) {
+                clearInterval(interval);
+                setPlanetLoading(false);
+            }
+        }, 16); // Increased frequency for 60fps smoothness
+
+        setView('quiz');
+        // Anchor to the quiz section instead of document top to avoid showing Hero again
+        const quizEl = document.getElementById('quiz');
+        if (quizEl) {
+            quizEl.scrollIntoView({ behavior: 'smooth' });
         }
-    }, 16); // Increased frequency for 60fps smoothness
+    };
 
-    setView('quiz');
-    // Anchor to the quiz section instead of document top to avoid showing Hero again
-    const quizEl = document.getElementById('quiz');
-    if (quizEl) {
-        quizEl.scrollIntoView({ behavior: 'smooth' });
-    }
-};
+    const nextArtifact = () => {
+        setCarouselIndex((prev) => (prev + 1) % artifactOptions.length);
+        setSelectedArtifact(artifactOptions[(carouselIndex + 1) % artifactOptions.length].id);
+    };
 
-const nextArtifact = () => {
-    setCarouselIndex((prev) => (prev + 1) % artifactOptions.length);
-    setSelectedArtifact(artifactOptions[(carouselIndex + 1) % artifactOptions.length].id);
-};
+    const prevArtifact = () => {
+        setCarouselIndex((prev) => (prev - 1 + artifactOptions.length) % artifactOptions.length);
+        setSelectedArtifact(artifactOptions[(carouselIndex - 1 + artifactOptions.length) % artifactOptions.length].id);
+    };
 
-const prevArtifact = () => {
-    setCarouselIndex((prev) => (prev - 1 + artifactOptions.length) % artifactOptions.length);
-    setSelectedArtifact(artifactOptions[(carouselIndex - 1 + artifactOptions.length) % artifactOptions.length].id);
-};
+    const handleEmailSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!email) return;
+        setView('artifact');
+    };
 
-const handleEmailSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email) return;
-    setView('artifact');
-};
+    const handleSubmit = async () => {
+        if (!email || !selectedArtifact) return;
 
-const handleSubmit = async () => {
-    if (!email || !selectedArtifact) return;
+        setSubmitting(true);
 
-    setSubmitting(true);
-
-    // Final Score Calculation
-    const traitScores: Record<string, number> = {};
-    quizQuestions.forEach(q => {
-        const rawScore = allAnswers[q.id] ?? 50;
-        const finalScore = q.direction.includes('Standard') ? rawScore : (100 - rawScore);
-        if (!traitScores[q.trait]) traitScores[q.trait] = 0;
-        traitScores[q.trait] += finalScore;
-    });
-
-    const percentages = Object.entries(traitScores).reduce((acc, [trait, score]) => {
-        acc[trait] = Math.round(score / 3); // Updated from /5 to /3 for 3 questions per trait
-        return acc;
-    }, {} as Record<string, number>);
-
-    try {
-        const res = await fetch('/api/submit', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                email,
-                traitPercentages: percentages,
-                assignments,
-                selectedProduct: selectedArtifact,
-                format: artifactOptions.find(a => a.id === selectedArtifact)?.format,
-                price: selectedPrices[selectedArtifact],
-                wishlistedItems: Array.from(wishlisted).map(id => artifactOptions.find(a => a.id === id)?.format),
-                type: 'quiz_complete_v4_personality',
-                timestamp: new Date().toISOString(),
-            }),
+        // Final Score Calculation
+        const traitScores: Record<string, number> = {};
+        quizQuestions.forEach(q => {
+            const rawScore = allAnswers[q.id] ?? 50;
+            const finalScore = q.direction.includes('Standard') ? rawScore : (100 - rawScore);
+            if (!traitScores[q.trait]) traitScores[q.trait] = 0;
+            traitScores[q.trait] += finalScore;
         });
 
-        if (res.ok) {
-            setView('success');
+        const percentages = Object.entries(traitScores).reduce((acc, [trait, score]) => {
+            acc[trait] = Math.round(score / 3); // Updated from /5 to /3 for 3 questions per trait
+            return acc;
+        }, {} as Record<string, number>);
+
+        try {
+            const res = await fetch('/api/submit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email,
+                    traitPercentages: percentages,
+                    assignments,
+                    selectedProduct: selectedArtifact,
+                    format: artifactOptions.find(a => a.id === selectedArtifact)?.format,
+                    price: selectedPrices[selectedArtifact],
+                    wishlistedItems: Array.from(wishlisted).map(id => artifactOptions.find(a => a.id === id)?.format),
+                    type: 'quiz_complete_v4_personality',
+                    timestamp: new Date().toISOString(),
+                }),
+            });
+
+            if (res.ok) {
+                setView('success');
+            }
+        } catch (error) {
+            console.error('Failed to submit', error);
+        } finally {
+            setSubmitting(false);
         }
-    } catch (error) {
-        console.error('Failed to submit', error);
-    } finally {
-        setSubmitting(false);
-    }
-};
-
-// 3D Preview interpolation
-const currentGlowColor = useMemo(() => {
-    if (!currentQuestion) return '#ffffff';
-    const colors = elementColors[currentQuestion.element.id];
-    return interpolateColor(colors.low, colors.high, sliderValue / 100);
-}, [currentQuestion, sliderValue]);
-
-const tintInfo = useMemo(() => {
-    if (!currentQuestion) return { color: 'transparent', opacity: 0 };
-    const colors = elementColors[currentQuestion.element.id];
-    const delta = Math.abs(sliderValue - 50);
-    let opacity = 0;
-    if (delta > 5) opacity = (delta / 25) * 0.3;
-    const isLow = sliderValue < 50;
-    return {
-        color: isLow ? colors.low : colors.high,
-        opacity: Math.min(0.6, opacity)
     };
-}, [currentQuestion, sliderValue]);
 
-// Render Trait Selection View
-const renderTraitSelection = () => {
-    const selectedElement = elementOptions.find(e => e.id === tempSelection);
+    // 3D Preview interpolation
+    const currentGlowColor = useMemo(() => {
+        if (!currentQuestion) return '#ffffff';
+        const colors = elementColors[currentQuestion.element.id];
+        return interpolateColor(colors.low, colors.high, sliderValue / 100);
+    }, [currentQuestion, sliderValue]);
 
-    return (
-        <div className={styles.traitSelectionContainer}>
-            <h2 className={styles.traitTitle}>Choose the elements that best represents how you imagine...</h2>
-            <h3 className={styles.traitSubtitle} key={`sub-${assignmentStep}`}>{currentTrait}</h3>
+    const tintInfo = useMemo(() => {
+        if (!currentQuestion) return { color: 'transparent', opacity: 0 };
+        const colors = elementColors[currentQuestion.element.id];
+        const delta = Math.abs(sliderValue - 50);
+        let opacity = 0;
+        if (delta > 5) opacity = (delta / 25) * 0.3;
+        const isLow = sliderValue < 50;
+        return {
+            color: isLow ? colors.low : colors.high,
+            opacity: Math.min(0.6, opacity)
+        };
+    }, [currentQuestion, sliderValue]);
 
-            <div className={styles.previewGrid} key={`grid-${assignmentStep}`}>
-                {selectedElement ? (
-                    <>
-                        <div className={styles.previewImageWrapper}>
-                            <div className={styles.lowHighLabelContainer}>
-                                <Image src={getAssetPath('/1_Quiz Planet Images/minus.png')} alt="" width={16} height={16} className={styles.logicIcon} />
-                                <span className={styles.lowHighLabel}>&nbsp;Low&nbsp;</span>
+    // Render Trait Selection View
+    const renderTraitSelection = () => {
+        const selectedElement = elementOptions.find(e => e.id === tempSelection);
+
+        return (
+            <div className={styles.traitSelectionContainer}>
+                <h2 className={styles.traitTitle}>Choose the elements that best represents how you imagine...</h2>
+                <h3 className={styles.traitSubtitle} key={`sub-${assignmentStep}`}>{currentTrait}</h3>
+
+                <div className={styles.previewGrid} key={`grid-${assignmentStep}`}>
+                    {selectedElement ? (
+                        <>
+                            <div className={styles.previewImageWrapper}>
+                                <div className={styles.lowHighLabelContainer}>
+                                    <Image src={getAssetPath('/1_Quiz Planet Images/minus.png')} alt="" width={16} height={16} className={styles.logicIcon} />
+                                    <span className={styles.lowHighLabel}>&nbsp;Low&nbsp;</span>
+                                </div>
+                                <Image src={getAssetPath(selectedElement.low)} alt="Low" width={250} height={250} className={styles.previewImage} />
                             </div>
-                            <Image src={getAssetPath(selectedElement.low)} alt="Low" width={250} height={250} className={styles.previewImage} />
-                        </div>
-                        <div className={styles.previewImageWrapper}>
-                            <div className={styles.lowHighLabelContainer}>
-                                <span className={styles.lowHighLabel}>&nbsp;High&nbsp;</span>
-                                <Image src={getAssetPath('/1_Quiz Planet Images/plus.png')} alt="" width={16} height={16} className={styles.logicIcon} />
+                            <div className={styles.previewImageWrapper}>
+                                <div className={styles.lowHighLabelContainer}>
+                                    <span className={styles.lowHighLabel}>&nbsp;High&nbsp;</span>
+                                    <Image src={getAssetPath('/1_Quiz Planet Images/plus.png')} alt="" width={16} height={16} className={styles.logicIcon} />
+                                </div>
+                                <Image src={getAssetPath(selectedElement.high)} alt="High" width={250} height={250} className={styles.previewImage} />
                             </div>
-                            <Image src={getAssetPath(selectedElement.high)} alt="High" width={250} height={250} className={styles.previewImage} />
-                        </div>
-                        <div className={styles.elementGroupTextContainer}>
-                            <div className={styles.elementGroupText}>{selectedElement.title}</div>
-                        </div>
-                    </>
-                ) : (
-                    <>
-                        <div className={styles.previewImageWrapper}>
-                            <div className={styles.lowHighLabelContainer}>
-                                <Image src={getAssetPath('/1_Quiz Planet Images/minus.png')} alt="" width={16} height={16} className={styles.logicIcon} />
-                                <span className={styles.lowHighLabel}>&nbsp;Low&nbsp;</span>
+                            <div className={styles.elementGroupTextContainer}>
+                                <div className={styles.elementGroupText}>{selectedElement.title}</div>
                             </div>
-                            <Image src={getAssetPath('/1_Quiz Planet Images/empty_space_planet.png')} alt="Empty" width={250} height={250} className={styles.previewImage} />
-                        </div>
-                        <div className={styles.previewImageWrapper}>
-                            <div className={styles.lowHighLabelContainer}>
-                                <span className={styles.lowHighLabel}>Low</span>
-                                <Image src={getAssetPath('/1_Quiz Planet Images/plus.png')} alt="" width={16} height={16} className={styles.logicIcon} />
-                                <span className={styles.lowHighLabel}>High</span>
+                        </>
+                    ) : (
+                        <>
+                            <div className={styles.previewImageWrapper}>
+                                <div className={styles.lowHighLabelContainer}>
+                                    <Image src={getAssetPath('/1_Quiz Planet Images/minus.png')} alt="" width={16} height={16} className={styles.logicIcon} />
+                                    <span className={styles.lowHighLabel}>&nbsp;Low&nbsp;</span>
+                                </div>
+                                <Image src={getAssetPath('/1_Quiz Planet Images/empty_space_planet.png')} alt="Empty" width={250} height={250} className={styles.previewImage} />
                             </div>
-                            <Image src={getAssetPath('/1_Quiz Planet Images/empty_space_planet.png')} alt="Empty" width={250} height={250} className={styles.previewImage} />
-                        </div>
-                    </>
-                )}
-            </div>
-
-
-            <div className={styles.selectionArea}>
-                <div className={styles.selectionTextContainer}>
-                    {/* Title is now moved inside previewGrid for better centering */}
+                            <div className={styles.previewImageWrapper}>
+                                <div className={styles.lowHighLabelContainer}>
+                                    <span className={styles.lowHighLabel}>Low</span>
+                                    <Image src={getAssetPath('/1_Quiz Planet Images/plus.png')} alt="" width={16} height={16} className={styles.logicIcon} />
+                                    <span className={styles.lowHighLabel}>High</span>
+                                </div>
+                                <Image src={getAssetPath('/1_Quiz Planet Images/empty_space_planet.png')} alt="Empty" width={250} height={250} className={styles.previewImage} />
+                            </div>
+                        </>
+                    )}
                 </div>
 
-                <div className={styles.elementButtons}>
-                    {elementOptions.map(opt => {
-                        const isAssigned = isElementAssigned(opt.id);
-                        const isSelected = tempSelection === opt.id;
+
+                <div className={styles.selectionArea}>
+                    <div className={styles.selectionTextContainer}>
+                        {/* Title is now moved inside previewGrid for better centering */}
+                    </div>
+
+                    <div className={styles.elementButtons}>
+                        {elementOptions.map(opt => {
+                            const isAssigned = isElementAssigned(opt.id);
+                            const isSelected = tempSelection === opt.id;
+
+                            return (
+                                <button
+                                    key={opt.id}
+                                    className={`${styles.elementBtn} ${isSelected ? styles.elementBtnSelected : ''} ${isAssigned ? styles.elementBtnDisabled : ''}`}
+                                    onClick={() => handleElementSelect(opt.id)}
+                                    disabled={isAssigned}
+                                >
+                                    <Image src={getAssetPath(opt.icon)} alt={opt.title} width={60} height={60} className={styles.elementIcon} />
+                                    {isAssigned && <div className={styles.checkMark}>✓</div>}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                <div className={styles.centeredNavContainer}>
+                    <button
+                        className={`${styles.navActionBtn} ${styles.nextBtn}`}
+                        onClick={handleTraitNext}
+                        disabled={!tempSelection}
+                    >
+                        Confirm
+                    </button>
+                </div>
+
+                <div className={styles.skipButtonContainer}>
+                    <button
+                        className={styles.decideSkipBtn}
+                        onClick={handleDecideForMe}
+                    >
+                        DECIDE FOR ME AND SKIP
+                    </button>
+                </div>
+            </div>
+        );
+    };
+
+    // Render Summary View
+    const renderTraitSummary = () => {
+        const traitPool = ['Agreeableness', 'Extraversion', 'Conscientiousness', 'Openness', 'Neuroticism'];
+
+        const handleTraitSwap = (elementId: string, newTrait: string) => {
+            const currentIdx = parseInt(elementId.replace('Q', '')) - 1;
+            const oldTrait = orderedTraits[currentIdx];
+            if (oldTrait === newTrait) return;
+
+            const targetIdx = orderedTraits.indexOf(newTrait);
+            const newOrderedTraits = [...orderedTraits];
+
+            // Swap traits in the ordered array
+            newOrderedTraits[targetIdx] = oldTrait;
+            newOrderedTraits[currentIdx] = newTrait;
+
+            setOrderedTraits(newOrderedTraits);
+
+            // Sync with assignments record
+            setAssignments(prev => {
+                const next = { ...prev };
+                next[newTrait] = elementId;
+                next[oldTrait] = `Q${targetIdx + 1}`;
+                return next;
+            });
+        };
+
+        return (
+            <div className={styles.summaryContainer}>
+                <h2 className={styles.summaryTitle}>Choose the personality traits that best represent this elements:</h2>
+                <div className={styles.summaryList}>
+                    {['Q1', 'Q2', 'Q3', 'Q4', 'Q5'].map((elementId, index) => {
+                        const element = elementOptions.find(e => e.id === elementId)!;
+                        const assignedTrait = orderedTraits[index];
 
                         return (
-                            <button
-                                key={opt.id}
-                                className={`${styles.elementBtn} ${isSelected ? styles.elementBtnSelected : ''} ${isAssigned ? styles.elementBtnDisabled : ''}`}
-                                onClick={() => handleElementSelect(opt.id)}
-                                disabled={isAssigned}
-                            >
-                                <Image src={getAssetPath(opt.icon)} alt={opt.title} width={60} height={60} className={styles.elementIcon} />
-                                {isAssigned && <div className={styles.checkMark}>✓</div>}
-                            </button>
+                            <div key={elementId} className={styles.summaryRow}>
+                                <span className={styles.summaryElementName}>{element.title}</span>
+                                <div className={styles.summaryRowControls}>
+                                    <div className={styles.summaryIconWrapper}>
+                                        <Image
+                                            src={getAssetPath(element.icon)}
+                                            alt={element.title}
+                                            width={120}
+                                            height={120}
+                                            className={styles.summaryIcon}
+                                        />
+                                    </div>
+                                    <div className={styles.traitSelectorWrapper}>
+                                        <select
+                                            className={styles.traitDropdown}
+                                            value={assignedTrait}
+                                            onChange={(e) => handleTraitSwap(elementId, e.target.value)}
+                                        >
+                                            {traitPool.map(t => (
+                                                <option key={t} value={t}>{t}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
                         );
                     })}
                 </div>
-            </div>
-
-            <div className={styles.centeredNavContainer}>
-                <button
-                    className={`${styles.navActionBtn} ${styles.nextBtn}`}
-                    onClick={handleTraitNext}
-                    disabled={!tempSelection}
-                >
+                <button className={styles.continueBtn} onClick={handleStartQuiz}>
                     Confirm
                 </button>
             </div>
+        );
+    };
 
-            <div className={styles.skipButtonContainer}>
-                <button
-                    className={styles.decideSkipBtn}
-                    onClick={handleDecideForMe}
-                >
-                    DECIDE FOR ME AND SKIP
-                </button>
+    const renderInitialLoader = () => {
+        // SVG circle properties
+        const radius = 60;
+        const circumference = 2 * Math.PI * radius;
+        const offset = circumference - (loaderProgress / 100) * circumference;
+
+        return (
+            <div className={styles.initialLoaderOverlay}>
+                <div className={styles.loaderContent}>
+                    <svg className={styles.circularLoader} width="160" height="160">
+                        <circle
+                            className={styles.loaderTrack}
+                            cx="80"
+                            cy="80"
+                            r={radius}
+                        />
+                        <circle
+                            className={styles.loaderProgress}
+                            cx="80"
+                            cy="80"
+                            r={radius}
+                            style={{ strokeDasharray: circumference, strokeDashoffset: offset }}
+                        />
+                    </svg>
+                    <div className={styles.loaderPercentage}>{loaderProgress}%</div>
+                </div>
             </div>
-        </div>
-    );
-};
+        );
+    };
 
-// Render Summary View
-const renderTraitSummary = () => {
-    const traitPool = ['Agreeableness', 'Extraversion', 'Conscientiousness', 'Openness', 'Neuroticism'];
+    const renderPlanetLoader = () => {
+        const radius = 60;
+        const circumference = 2 * Math.PI * radius;
+        const offset = circumference - (planetProgress / 100) * circumference;
 
-    const handleTraitSwap = (elementId: string, newTrait: string) => {
-        const currentIdx = parseInt(elementId.replace('Q', '')) - 1;
-        const oldTrait = orderedTraits[currentIdx];
-        if (oldTrait === newTrait) return;
-
-        const targetIdx = orderedTraits.indexOf(newTrait);
-        const newOrderedTraits = [...orderedTraits];
-
-        // Swap traits in the ordered array
-        newOrderedTraits[targetIdx] = oldTrait;
-        newOrderedTraits[currentIdx] = newTrait;
-
-        setOrderedTraits(newOrderedTraits);
-
-        // Sync with assignments record
-        setAssignments(prev => {
-            const next = { ...prev };
-            next[newTrait] = elementId;
-            next[oldTrait] = `Q${targetIdx + 1}`;
-            return next;
-        });
+        return (
+            <div className={styles.planetLoaderOverlay}>
+                <div className={styles.loaderContent}>
+                    <svg className={styles.circularLoader} width="160" height="160">
+                        <circle
+                            className={styles.loaderTrack}
+                            cx="80"
+                            cy="80"
+                            r={radius}
+                        />
+                        <circle
+                            className={styles.loaderProgress}
+                            cx="80"
+                            cy="80"
+                            r={radius}
+                            style={{ strokeDasharray: circumference, strokeDashoffset: offset }}
+                        />
+                    </svg>
+                    <div className={styles.loaderPercentage}>{planetProgress}%</div>
+                </div>
+            </div>
+        );
     };
 
     return (
-        <div className={styles.summaryContainer}>
-            <h2 className={styles.summaryTitle}>Choose the personality traits that best represent this elements:</h2>
-            <div className={styles.summaryList}>
-                {['Q1', 'Q2', 'Q3', 'Q4', 'Q5'].map((elementId, index) => {
-                    const element = elementOptions.find(e => e.id === elementId)!;
-                    const assignedTrait = orderedTraits[index];
+        <section className={styles.quizSection} id="quiz">
+            {showInitialLoader && renderInitialLoader()}
+            {planetLoading && renderPlanetLoader()}
 
-                    return (
-                        <div key={elementId} className={styles.summaryRow}>
-                            <span className={styles.summaryElementName}>{element.title}</span>
-                            <div className={styles.summaryRowControls}>
-                                <div className={styles.summaryIconWrapper}>
-                                    <Image
-                                        src={getAssetPath(element.icon)}
-                                        alt={element.title}
-                                        width={120}
-                                        height={120}
-                                        className={styles.summaryIcon}
-                                    />
-                                </div>
-                                <div className={styles.traitSelectorWrapper}>
-                                    <select
-                                        className={styles.traitDropdown}
-                                        value={assignedTrait}
-                                        onChange={(e) => handleTraitSwap(elementId, e.target.value)}
-                                    >
-                                        {traitPool.map(t => (
-                                            <option key={t} value={t}>{t}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
-            <button className={styles.continueBtn} onClick={handleStartQuiz}>
-                Confirm
-            </button>
-        </div>
-    );
-};
-
-const renderInitialLoader = () => {
-    // SVG circle properties
-    const radius = 60;
-    const circumference = 2 * Math.PI * radius;
-    const offset = circumference - (loaderProgress / 100) * circumference;
-
-    return (
-        <div className={styles.initialLoaderOverlay}>
-            <div className={styles.loaderContent}>
-                <svg className={styles.circularLoader} width="160" height="160">
-                    <circle
-                        className={styles.loaderTrack}
-                        cx="80"
-                        cy="80"
-                        r={radius}
-                    />
-                    <circle
-                        className={styles.loaderProgress}
-                        cx="80"
-                        cy="80"
-                        r={radius}
-                        style={{ strokeDasharray: circumference, strokeDashoffset: offset }}
-                    />
-                </svg>
-                <div className={styles.loaderPercentage}>{loaderProgress}%</div>
-            </div>
-        </div>
-    );
-};
-
-const renderPlanetLoader = () => {
-    const radius = 60;
-    const circumference = 2 * Math.PI * radius;
-    const offset = circumference - (planetProgress / 100) * circumference;
-
-    return (
-        <div className={styles.planetLoaderOverlay}>
-            <div className={styles.loaderContent}>
-                <svg className={styles.circularLoader} width="160" height="160">
-                    <circle
-                        className={styles.loaderTrack}
-                        cx="80"
-                        cy="80"
-                        r={radius}
-                    />
-                    <circle
-                        className={styles.loaderProgress}
-                        cx="80"
-                        cy="80"
-                        r={radius}
-                        style={{ strokeDasharray: circumference, strokeDashoffset: offset }}
-                    />
-                </svg>
-                <div className={styles.loaderPercentage}>{planetProgress}%</div>
-            </div>
-        </div>
-    );
-};
-
-return (
-    <section className={styles.quizSection} id="quiz">
-        {showInitialLoader && renderInitialLoader()}
-        {planetLoading && renderPlanetLoader()}
-
-        {/* Persistent Export STL Buttons in corner */}
-        {(view === 'quiz' || view === 'email' || view === 'artifact') && (
-            <div className={styles.cornerControlsContainer}>
-                <button
-                    className={styles.cornerExportBtn}
-                    onClick={() => handleDownloadSTL('standard')}
-                    title="Export Standard 3D Model (.STL)"
-                >
-                    <Download size={24} />
-                    <span className={styles.exportBtnText}>Export STL</span>
-                </button>
-                <button
-                    className={`${styles.cornerExportBtn} ${styles.holeBtn}`}
-                    onClick={() => handleDownloadSTL('hole')}
-                    title="Export with Massive Hole"
-                >
-                    <Image src={getAssetPath('/1_Quiz Planet Images/middle.png')} alt="" width={20} height={20} className={styles.holeIcon} />
-                    <span className={styles.exportBtnText}>Export + Hole</span>
-                </button>
-                <button
-                    className={`${styles.cornerExportBtn} ${styles.ringBtn}`}
-                    onClick={() => handleDownloadSTL('ring')}
-                    title="Export with Attached Ring Loop"
-                >
-                    <Image src={getAssetPath('/1_Quiz Planet Images/islands.png')} alt="" width={20} height={20} className={styles.ringIcon} />
-                    <span className={styles.exportBtnText}>Export + Ring</span>
-                </button>
-                <button
-                    className={`${styles.cornerExportBtn} ${styles.holeBtn}`}
-                    onClick={() => handleDownloadSTL('ring_hole')}
-                    title="Export with 2 Holes for Cord"
-                >
-                    <Image src={getAssetPath('/1_Quiz Planet Images/middle.png')} alt="" width={20} height={20} className={styles.holeIcon} />
-                    <span className={styles.exportBtnText}>Export + 2 Holes</span>
-                </button>
-                <button
-                    className={`${styles.cornerExportBtn} ${styles.holeBtn}`}
-                    onClick={() => handleDownloadSTL('four_holes')}
-                    title="Export with 4 Holes for Cord (Top & Bottom)"
-                >
-                    <Image src={getAssetPath('/1_Quiz Planet Images/middle.png')} alt="" width={20} height={20} className={styles.holeIcon} />
-                    <span className={styles.exportBtnText}>Export + 4 Holes</span>
-                </button>
-            </div>
-        )}
-
-        <div className={styles.container}>
-            {/* Global Planet Visual: Visible during quiz (normal) and email/artifact (blurred) */}
-            {/* Global Planet Visual: Visible during email/artifact (blurred) */}
-            {(view === 'email' || view === 'artifact') && (
-                <div
-                    className={`
-                            ${styles.globalPlanetContainer} 
-                            ${styles.globalPlanetVisible}
-                            ${styles.globalPlanetBlurred}
-                        `}
-                    style={{ '--glow-color': currentGlowColor } as React.CSSProperties}
-                >
-                    <div className={styles.planetVisual}>
-                        <div style={{ width: '100%', height: '100%', position: 'relative' }}>
-                            <Suspense fallback={<div className={styles.planetLoaderPlaceholder}>Establishing Connection...</div>}>
-                                <Planet3D
-                                    ref={planet3DRef}
-                                    values={elementOptions.map(opt => elementValues[opt.id])}
-                                    currentSection={4}
-                                    tintColor={tintInfo.color}
-                                    tintOpacity={tintInfo.opacity}
-                                />
-                            </Suspense>
-                        </div>
-                    </div>
-
-                    <div className={styles.emailSymbolOverlay}>
-                        <Mail size={80} strokeWidth={1.5} />
-                    </div>
-                </div>
-            )}
-
-            {view === 'traitSelection' && renderTraitSelection()}
-            {view === 'traitSummary' && renderTraitSummary()}
-
-            {view === 'quiz' && (
-                <>
-                    {/* Top: Progress and Question */}
-                    <div className={`${styles.topQuizLayer} ${isQuizReady ? styles.quizFadeIn : ''}`}>
-                        <div className={`${styles.progressContainer} ${isQuestionTransitioning ? styles.transitioning : ''}`}>
-                            {quizQuestions.map((_, index) => (
-                                <div
-                                    key={index}
-                                    className={`${styles.progressLine} ${index <= currentQuestionIndex ? styles.active : ''}`}
-                                />
-                            ))}
-                        </div>
-                        <h2
-                            className={`${styles.questionTitle} ${isQuestionTransitioning ? styles.fadeOut : styles.fadeIn}`}
-                            style={{
-                                fontSize: (currentQuestion?.statement?.length || 0) > 80 ? '1.2rem' : '1.5rem'
-                            }}
-                        >
-                            {currentQuestion.statement}
-                        </h2>
-                    </div>
-
-                    {/* Center: Global Planet Visual */}
-                    <div className={styles.centerQuizLayer}>
-                        <div
-                            className={`${styles.globalPlanetContainer} ${styles.globalPlanetVisible}`}
-                            style={{ '--glow-color': currentGlowColor } as React.CSSProperties}
-                        >
-                            <div className={styles.planetVisual}>
-                                <div style={{ width: '100%', height: '100%', position: 'relative' }}>
-                                    <Suspense fallback={<div className={styles.planetLoaderPlaceholder}>Establishing Connection...</div>}>
-                                        <Planet3D
-                                            ref={planet3DRef}
-                                            values={elementOptions.map(opt => elementValues[opt.id])}
-                                            currentSection={currentQuestion ? elementOptions.findIndex(e => e.id === currentQuestion.element.id) : -1}
-                                            tintColor={tintInfo.color}
-                                            tintOpacity={tintInfo.opacity}
-                                        />
-                                    </Suspense>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Bottom: Instructions, Descriptors, Slider, and Buttons */}
-                    <div className={`${styles.bottomQuizLayer} ${isQuizReady ? styles.quizFadeIn : ''}`}>
-                        <div className={`${styles.unifiedTextContainer} ${isQuestionTransitioning ? styles.fadeOut : styles.fadeIn}`}>
-                            <div className={`${styles.descriptorText} ${getDescriptorText(currentQuestionIndex, sliderValue) ? styles.active : styles.hidden}`}>
-                                {getDescriptorText(currentQuestionIndex, sliderValue)}
-                            </div>
-                            <div className={`${styles.instructionOverlay} ${(!getDescriptorText(currentQuestionIndex, sliderValue) && showIdleOverlay && isQuizReady) ? styles.active : styles.hidden}`}>
-                                <div>Move with the slider</div>
-                                <div><ArrowLeft className={`${styles.instructionIcon} ${styles.instructionIconLeft}`} /> how little or how much <ArrowRight className={`${styles.instructionIcon} ${styles.instructionIconRight}`} /></div>
-                                <div>the sentence represents you.</div>
-                            </div>
-                        </div>
-
-                        <div className={`${styles.sliderContainerVisible} ${isQuestionTransitioning ? styles.fadeOut : styles.fadeIn}`}>
-                            <div className={styles.logoSliderWrapper} style={{ '--slider-value': sliderValue } as React.CSSProperties}>
-                                <div className={styles.sliderPercentage}>{sliderValue}%</div>
-                                <input
-                                    type="range"
-                                    min="0"
-                                    max="100"
-                                    step="1"
-                                    value={sliderValue}
-                                    onChange={handleSliderChange}
-                                    className={styles.logoSliderInteractable}
-                                    style={{
-                                        '--glow-color': currentGlowColor,
-                                        '--thumb-image': `url('${getAssetPath('/Logo color.png')}')`
-                                    } as React.CSSProperties}
-                                    aria-label="Select your intensity"
-                                />
-                                <div className={styles.sliderTrackLine} />
-                            </div>
-                        </div>
-
-                        <div className={styles.quizNavigationButtons}>
-                            <button
-                                className={`${styles.navControlBtn} ${currentQuestionIndex === 0 ? styles.unclickable : ''} ${isQuestionTransitioning ? styles.transitioning : ''}`}
-                                onClick={() => !isQuestionTransitioning && handleBackQuestion()}
-                                disabled={currentQuestionIndex === 0 || isQuestionTransitioning}
-                            >
-                                <ArrowLeft /> Back
-                            </button>
-                            <button
-                                className={`${styles.navControlBtn} ${styles.primary} ${isQuestionTransitioning ? styles.transitioning : ''}`}
-                                onClick={() => !isQuestionTransitioning && handleNextQuestion()}
-                                disabled={isQuestionTransitioning}
-                            >
-                                {currentQuestionIndex === quizQuestions.length - 1 ? 'Finish' : 'Next question'} <ArrowRight />
-                            </button>
-                        </div>
-                    </div>
-                </>
-            )}
-
-            {view === 'email' && (
-                <div className={styles.emailForm}>
-                    <div className={styles.emailHeader}>
-                        <h2 className={styles.questionTitle}>We’ll let you know when it’s ready!</h2>
-                    </div>
-
-                    <div className={styles.emailBottom}>
-                        <form onSubmit={handleEmailSubmit} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center' }}>
-                            <input
-                                type="text"
-                                required
-                                placeholder="Your Name"
-                                value={userName}
-                                onChange={(e) => setUserName(e.target.value)}
-                                className={styles.emailInput}
-                                autoFocus
-                            />
-                            <input
-                                type="number"
-                                required
-                                placeholder="Age"
-                                value={userAge}
-                                onChange={(e) => setUserAge(e.target.value)}
-                                className={styles.emailInput}
-                            />
-                            <input
-                                type="email"
-                                required
-                                placeholder="enter@email.com"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                className={styles.emailInput}
-                            />
-                            <button
-                                type="submit"
-                                className={styles.continueBtn}
-                                style={{ marginTop: '0.5rem' }}
-                            >
-                                Save your planet
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => handleDownloadSTL('standard')}
-                                className={styles.secondaryDownloadBtn}
-                            >
-                                <Download size={20} />
-                                Download (.STL)
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => handleDownloadSTL('hole')}
-                                className={`${styles.secondaryDownloadBtn} ${styles.holeBtn}`}
-                            >
-                                <Image src={getAssetPath('/1_Quiz Planet Images/middle.png')} alt="" width={18} height={18} className={styles.holeIcon} />
-                                Download + Hole (.STL)
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => handleDownloadSTL('ring')}
-                                className={`${styles.secondaryDownloadBtn} ${styles.ringBtn}`}
-                            >
-                                <Image src={getAssetPath('/1_Quiz Planet Images/islands.png')} alt="" width={18} height={18} className={styles.ringIcon} />
-                                Download + Ring (.STL)
-                            </button>
-                        </form>
-                    </div>
-                </div>
-            )}
-
-            {view === 'artifact' && (
-                <div className={styles.emailForm} style={{ maxWidth: '800px' }}>
-                    <h2 className={styles.questionTitle} style={{ fontSize: '2rem' }}>Save your planet!</h2>
-                    <p className={styles.emailSubtext} style={{ whiteSpace: 'pre-line', marginBottom: '0.5rem' }}>
-                        In which format would you like your planet?
-                    </p>
-
-                    <div className={styles.carouselContainer}>
-                        <button onClick={prevArtifact} className={styles.navBtn} aria-label="Previous artifact">
-                            ‹
-                        </button>
-
-                        <div className={styles.carouselTrack}>
-                            {artifactOptions.map((artifact, idx) => {
-                                let offset = idx - carouselIndex;
-                                if (offset > artifactOptions.length / 2) offset -= artifactOptions.length;
-                                if (offset < -artifactOptions.length / 2) offset += artifactOptions.length;
-
-                                const isActive = idx === carouselIndex;
-                                const isSaved = wishlisted.has(artifact.id);
-                                const isDigital = artifact.id === 'artifact_1';
-
-                                return (
-                                    <div
-                                        key={artifact.id}
-                                        className={`${styles.carouselItem} ${isActive ? styles.activeItem : ''}`}
-                                        onClick={() => {
-                                            setCarouselIndex(idx);
-                                            setSelectedArtifact(artifact.id);
-                                        }}
-                                        style={{
-                                            transform: `translateX(${offset * 105}%) scale(${isActive ? 1 : 0.8})`,
-                                            opacity: Math.abs(offset) > 1 ? 0 : (isActive ? 1 : 0.5),
-                                            zIndex: isActive ? 10 : 1
-                                        }}
-                                    >
-                                        <div className={styles.artifactMainImageWrapper}>
-                                            <Image
-                                                src={artifact.image}
-                                                alt={artifact.label}
-                                                fill
-                                                className={styles.artifactMainImage}
-                                                priority={isActive}
-                                            />
-                                        </div>
-
-                                        <h3 className={styles.artifactFormatTitle}>{isDigital ? 'Digital (free)' : artifact.format}</h3>
-
-                                        <button
-                                            className={`${styles.wishlistBtn} ${isSaved ? styles.saved : ''}`}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                setWishlisted(prev => {
-                                                    const next = new Set(prev);
-                                                    if (next.has(artifact.id)) next.delete(artifact.id);
-                                                    else next.add(artifact.id);
-                                                    return next;
-                                                });
-                                            }}
-                                        >
-                                            {isSaved ? '✓ Saved' : 'Wishlist +'}
-                                        </button>
-
-                                        {isSaved ? (
-                                            <div className={styles.priceContainer}>
-                                                <p className={styles.promoText} style={{ color: 'white' }}>
-                                                    {isDigital
-                                                        ? "We’ll always send you your digital planet + the results of your personality test"
-                                                        : "How would you value this handmade product?"
-                                                    }
-                                                </p>
-                                                <div className={styles.pricePillsContainer}>
-                                                    {artifact.priceTiers.map((price) => (
-                                                        <button
-                                                            key={price}
-                                                            className={`${styles.pricePill} ${selectedPrices[artifact.id] === price ? styles.activePill : ''}`}
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                setSelectedPrices(prev => ({ ...prev, [artifact.id]: price }));
-                                                            }}
-                                                        >
-                                                            {price === 0 ? 'Free' : `${price}€`}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        ) : (
-                                            <p className={styles.promoText} style={{ color: 'white', fontSize: '1rem', marginTop: '1rem' }}>
-                                                Save it to your wishlist and get a 20% off when ready!
-                                            </p>
-                                        )}
-
-                                    </div>
-                                );
-                            })}
-                        </div>
-
-                        <button onClick={nextArtifact} className={styles.navBtn} aria-label="Next artifact">
-                            ›
-                        </button>
-                    </div>
-
+            {/* Persistent Export STL Buttons in corner */}
+            {(view === 'quiz' || view === 'email' || view === 'artifact') && (
+                <div className={styles.cornerControlsContainer}>
                     <button
-                        onClick={handleSubmit}
-                        className={styles.continueBtn}
-                        disabled={submitting || !selectedArtifact}
-                        style={{
-                            marginTop: '2rem',
-                            opacity: selectedArtifact ? 1 : 0.5,
-                            cursor: selectedArtifact ? 'pointer' : 'not-allowed'
-                        }}
+                        className={styles.cornerExportBtn}
+                        onClick={() => handleDownloadSTL('standard')}
+                        title="Export Standard 3D Model (.STL)"
                     >
-                        {submitting ? 'Transmitting...' : 'Receive Transmission'}
+                        <Download size={24} />
+                        <span className={styles.exportBtnText}>Export STL</span>
+                    </button>
+                    <button
+                        className={`${styles.cornerExportBtn} ${styles.holeBtn}`}
+                        onClick={() => handleDownloadSTL('hole')}
+                        title="Export with Massive Hole"
+                    >
+                        <Image src={getAssetPath('/1_Quiz Planet Images/middle.png')} alt="" width={20} height={20} className={styles.holeIcon} />
+                        <span className={styles.exportBtnText}>Export + Hole</span>
+                    </button>
+                    <button
+                        className={`${styles.cornerExportBtn} ${styles.ringBtn}`}
+                        onClick={() => handleDownloadSTL('ring')}
+                        title="Export with Attached Ring Loop"
+                    >
+                        <Image src={getAssetPath('/1_Quiz Planet Images/islands.png')} alt="" width={20} height={20} className={styles.ringIcon} />
+                        <span className={styles.exportBtnText}>Export + Ring</span>
+                    </button>
+                    <button
+                        className={`${styles.cornerExportBtn} ${styles.holeBtn}`}
+                        onClick={() => handleDownloadSTL('ring_hole')}
+                        title="Export with 2 Holes for Cord"
+                    >
+                        <Image src={getAssetPath('/1_Quiz Planet Images/middle.png')} alt="" width={20} height={20} className={styles.holeIcon} />
+                        <span className={styles.exportBtnText}>Export + 2 Holes</span>
+                    </button>
+                    <button
+                        className={`${styles.cornerExportBtn} ${styles.holeBtn}`}
+                        onClick={() => handleDownloadSTL('four_holes')}
+                        title="Export with 4 Holes for Cord (Top & Bottom)"
+                    >
+                        <Image src={getAssetPath('/1_Quiz Planet Images/middle.png')} alt="" width={20} height={20} className={styles.holeIcon} />
+                        <span className={styles.exportBtnText}>Export + 4 Holes</span>
+                    </button>
+                    <button
+                        className={styles.cornerExportBtn}
+                        onClick={() => handleDownloadSTL('flat')}
+                        title="Export with Flat Base for Surface Support"
+                    >
+                        <Download size={24} />
+                        <span className={styles.exportBtnText}>Export Flat Base</span>
                     </button>
                 </div>
             )}
 
-            {view === 'success' && (
-                <div className={styles.successMessage}>
-                    <span className={styles.successIcon}>✨</span>
-                    <h2 className={styles.questionTitle}>Transmission Received</h2>
-                    <p className={styles.optionDesc}>
-                        Check your inbox to continue your journey.
-                    </p>
-                </div>
-            )}
-        </div>
-    </section >
-);
+            <div className={styles.container}>
+                {/* Global Planet Visual: Visible during quiz (normal) and email/artifact (blurred) */}
+                {/* Global Planet Visual: Visible during email/artifact (blurred) */}
+                {(view === 'email' || view === 'artifact') && (
+                    <div
+                        className={`
+                            ${styles.globalPlanetContainer} 
+                            ${styles.globalPlanetVisible}
+                            ${styles.globalPlanetBlurred}
+                        `}
+                        style={{ '--glow-color': currentGlowColor } as React.CSSProperties}
+                    >
+                        <div className={styles.planetVisual}>
+                            <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+                                <Suspense fallback={<div className={styles.planetLoaderPlaceholder}>Establishing Connection...</div>}>
+                                    <Planet3D
+                                        ref={planet3DRef}
+                                        values={elementOptions.map(opt => elementValues[opt.id])}
+                                        currentSection={4}
+                                        tintColor={tintInfo.color}
+                                        tintOpacity={tintInfo.opacity}
+                                    />
+                                </Suspense>
+                            </div>
+                        </div>
+
+                        <div className={styles.emailSymbolOverlay}>
+                            <Mail size={80} strokeWidth={1.5} />
+                        </div>
+                    </div>
+                )}
+
+                {view === 'traitSelection' && renderTraitSelection()}
+                {view === 'traitSummary' && renderTraitSummary()}
+
+                {view === 'quiz' && (
+                    <>
+                        {/* Top: Progress and Question */}
+                        <div className={`${styles.topQuizLayer} ${isQuizReady ? styles.quizFadeIn : ''}`}>
+                            <div className={`${styles.progressContainer} ${isQuestionTransitioning ? styles.transitioning : ''}`}>
+                                {quizQuestions.map((_, index) => (
+                                    <div
+                                        key={index}
+                                        className={`${styles.progressLine} ${index <= currentQuestionIndex ? styles.active : ''}`}
+                                    />
+                                ))}
+                            </div>
+                            <h2
+                                className={`${styles.questionTitle} ${isQuestionTransitioning ? styles.fadeOut : styles.fadeIn}`}
+                                style={{
+                                    fontSize: (currentQuestion?.statement?.length || 0) > 80 ? '1.2rem' : '1.5rem'
+                                }}
+                            >
+                                {currentQuestion.statement}
+                            </h2>
+                        </div>
+
+                        {/* Center: Global Planet Visual */}
+                        <div className={styles.centerQuizLayer}>
+                            <div
+                                className={`${styles.globalPlanetContainer} ${styles.globalPlanetVisible}`}
+                                style={{ '--glow-color': currentGlowColor } as React.CSSProperties}
+                            >
+                                <div className={styles.planetVisual}>
+                                    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+                                        <Suspense fallback={<div className={styles.planetLoaderPlaceholder}>Establishing Connection...</div>}>
+                                            <Planet3D
+                                                ref={planet3DRef}
+                                                values={elementOptions.map(opt => elementValues[opt.id])}
+                                                currentSection={currentQuestion ? elementOptions.findIndex(e => e.id === currentQuestion.element.id) : -1}
+                                                tintColor={tintInfo.color}
+                                                tintOpacity={tintInfo.opacity}
+                                            />
+                                        </Suspense>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Bottom: Instructions, Descriptors, Slider, and Buttons */}
+                        <div className={`${styles.bottomQuizLayer} ${isQuizReady ? styles.quizFadeIn : ''}`}>
+                            <div className={`${styles.unifiedTextContainer} ${isQuestionTransitioning ? styles.fadeOut : styles.fadeIn}`}>
+                                <div className={`${styles.descriptorText} ${getDescriptorText(currentQuestionIndex, sliderValue) ? styles.active : styles.hidden}`}>
+                                    {getDescriptorText(currentQuestionIndex, sliderValue)}
+                                </div>
+                                <div className={`${styles.instructionOverlay} ${(!getDescriptorText(currentQuestionIndex, sliderValue) && showIdleOverlay && isQuizReady) ? styles.active : styles.hidden}`}>
+                                    <div>Move with the slider</div>
+                                    <div><ArrowLeft className={`${styles.instructionIcon} ${styles.instructionIconLeft}`} /> how little or how much <ArrowRight className={`${styles.instructionIcon} ${styles.instructionIconRight}`} /></div>
+                                    <div>the sentence represents you.</div>
+                                </div>
+                            </div>
+
+                            <div className={`${styles.sliderContainerVisible} ${isQuestionTransitioning ? styles.fadeOut : styles.fadeIn}`}>
+                                <div className={styles.logoSliderWrapper} style={{ '--slider-value': sliderValue } as React.CSSProperties}>
+                                    <div className={styles.sliderPercentage}>{sliderValue}%</div>
+                                    <input
+                                        type="range"
+                                        min="0"
+                                        max="100"
+                                        step="1"
+                                        value={sliderValue}
+                                        onChange={handleSliderChange}
+                                        className={styles.logoSliderInteractable}
+                                        style={{
+                                            '--glow-color': currentGlowColor,
+                                            '--thumb-image': `url('${getAssetPath('/Logo color.png')}')`
+                                        } as React.CSSProperties}
+                                        aria-label="Select your intensity"
+                                    />
+                                    <div className={styles.sliderTrackLine} />
+                                </div>
+                            </div>
+
+                            <div className={styles.quizNavigationButtons}>
+                                <button
+                                    className={`${styles.navControlBtn} ${currentQuestionIndex === 0 ? styles.unclickable : ''} ${isQuestionTransitioning ? styles.transitioning : ''}`}
+                                    onClick={() => !isQuestionTransitioning && handleBackQuestion()}
+                                    disabled={currentQuestionIndex === 0 || isQuestionTransitioning}
+                                >
+                                    <ArrowLeft /> Back
+                                </button>
+                                <button
+                                    className={`${styles.navControlBtn} ${styles.primary} ${isQuestionTransitioning ? styles.transitioning : ''}`}
+                                    onClick={() => !isQuestionTransitioning && handleNextQuestion()}
+                                    disabled={isQuestionTransitioning}
+                                >
+                                    {currentQuestionIndex === quizQuestions.length - 1 ? 'Finish' : 'Next question'} <ArrowRight />
+                                </button>
+                            </div>
+                        </div>
+                    </>
+                )}
+
+                {view === 'email' && (
+                    <div className={styles.emailForm}>
+                        <div className={styles.emailHeader}>
+                            <h2 className={styles.questionTitle}>We’ll let you know when it’s ready!</h2>
+                        </div>
+
+                        <div className={styles.emailBottom}>
+                            <form onSubmit={handleEmailSubmit} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center' }}>
+                                <input
+                                    type="text"
+                                    required
+                                    placeholder="Your Name"
+                                    value={userName}
+                                    onChange={(e) => setUserName(e.target.value)}
+                                    className={styles.emailInput}
+                                    autoFocus
+                                />
+                                <input
+                                    type="number"
+                                    required
+                                    placeholder="Age"
+                                    value={userAge}
+                                    onChange={(e) => setUserAge(e.target.value)}
+                                    className={styles.emailInput}
+                                />
+                                <input
+                                    type="email"
+                                    required
+                                    placeholder="enter@email.com"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    className={styles.emailInput}
+                                />
+                                <button
+                                    type="submit"
+                                    className={styles.continueBtn}
+                                    style={{ marginTop: '0.5rem' }}
+                                >
+                                    Save your planet
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleDownloadSTL('standard')}
+                                    className={styles.secondaryDownloadBtn}
+                                >
+                                    <Download size={20} />
+                                    Download (.STL)
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleDownloadSTL('hole')}
+                                    className={`${styles.secondaryDownloadBtn} ${styles.holeBtn}`}
+                                >
+                                    <Image src={getAssetPath('/1_Quiz Planet Images/middle.png')} alt="" width={18} height={18} className={styles.holeIcon} />
+                                    Download + Hole (.STL)
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleDownloadSTL('ring')}
+                                    className={`${styles.secondaryDownloadBtn} ${styles.ringBtn}`}
+                                >
+                                    <Image src={getAssetPath('/1_Quiz Planet Images/islands.png')} alt="" width={18} height={18} className={styles.ringIcon} />
+                                    Download + Ring (.STL)
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleDownloadSTL('flat')}
+                                    className={styles.secondaryDownloadBtn}
+                                >
+                                    <Download size={20} />
+                                    Download + Flat Base (.STL)
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                )}
+
+                {view === 'artifact' && (
+                    <div className={styles.emailForm} style={{ maxWidth: '800px' }}>
+                        <h2 className={styles.questionTitle} style={{ fontSize: '2rem' }}>Save your planet!</h2>
+                        <p className={styles.emailSubtext} style={{ whiteSpace: 'pre-line', marginBottom: '0.5rem' }}>
+                            In which format would you like your planet?
+                        </p>
+
+                        <div className={styles.carouselContainer}>
+                            <button onClick={prevArtifact} className={styles.navBtn} aria-label="Previous artifact">
+                                ‹
+                            </button>
+
+                            <div className={styles.carouselTrack}>
+                                {artifactOptions.map((artifact, idx) => {
+                                    let offset = idx - carouselIndex;
+                                    if (offset > artifactOptions.length / 2) offset -= artifactOptions.length;
+                                    if (offset < -artifactOptions.length / 2) offset += artifactOptions.length;
+
+                                    const isActive = idx === carouselIndex;
+                                    const isSaved = wishlisted.has(artifact.id);
+                                    const isDigital = artifact.id === 'artifact_1';
+
+                                    return (
+                                        <div
+                                            key={artifact.id}
+                                            className={`${styles.carouselItem} ${isActive ? styles.activeItem : ''}`}
+                                            onClick={() => {
+                                                setCarouselIndex(idx);
+                                                setSelectedArtifact(artifact.id);
+                                            }}
+                                            style={{
+                                                transform: `translateX(${offset * 105}%) scale(${isActive ? 1 : 0.8})`,
+                                                opacity: Math.abs(offset) > 1 ? 0 : (isActive ? 1 : 0.5),
+                                                zIndex: isActive ? 10 : 1
+                                            }}
+                                        >
+                                            <div className={styles.artifactMainImageWrapper}>
+                                                <Image
+                                                    src={artifact.image}
+                                                    alt={artifact.label}
+                                                    fill
+                                                    className={styles.artifactMainImage}
+                                                    priority={isActive}
+                                                />
+                                            </div>
+
+                                            <h3 className={styles.artifactFormatTitle}>{isDigital ? 'Digital (free)' : artifact.format}</h3>
+
+                                            <button
+                                                className={`${styles.wishlistBtn} ${isSaved ? styles.saved : ''}`}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setWishlisted(prev => {
+                                                        const next = new Set(prev);
+                                                        if (next.has(artifact.id)) next.delete(artifact.id);
+                                                        else next.add(artifact.id);
+                                                        return next;
+                                                    });
+                                                }}
+                                            >
+                                                {isSaved ? '✓ Saved' : 'Wishlist +'}
+                                            </button>
+
+                                            {isSaved ? (
+                                                <div className={styles.priceContainer}>
+                                                    <p className={styles.promoText} style={{ color: 'white' }}>
+                                                        {isDigital
+                                                            ? "We’ll always send you your digital planet + the results of your personality test"
+                                                            : "How would you value this handmade product?"
+                                                        }
+                                                    </p>
+                                                    <div className={styles.pricePillsContainer}>
+                                                        {artifact.priceTiers.map((price) => (
+                                                            <button
+                                                                key={price}
+                                                                className={`${styles.pricePill} ${selectedPrices[artifact.id] === price ? styles.activePill : ''}`}
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setSelectedPrices(prev => ({ ...prev, [artifact.id]: price }));
+                                                                }}
+                                                            >
+                                                                {price === 0 ? 'Free' : `${price}€`}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <p className={styles.promoText} style={{ color: 'white', fontSize: '1rem', marginTop: '1rem' }}>
+                                                    Save it to your wishlist and get a 20% off when ready!
+                                                </p>
+                                            )}
+
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            <button onClick={nextArtifact} className={styles.navBtn} aria-label="Next artifact">
+                                ›
+                            </button>
+                        </div>
+
+                        <button
+                            onClick={handleSubmit}
+                            className={styles.continueBtn}
+                            disabled={submitting || !selectedArtifact}
+                            style={{
+                                marginTop: '2rem',
+                                opacity: selectedArtifact ? 1 : 0.5,
+                                cursor: selectedArtifact ? 'pointer' : 'not-allowed'
+                            }}
+                        >
+                            {submitting ? 'Transmitting...' : 'Receive Transmission'}
+                        </button>
+                    </div>
+                )}
+
+                {view === 'success' && (
+                    <div className={styles.successMessage}>
+                        <span className={styles.successIcon}>✨</span>
+                        <h2 className={styles.questionTitle}>Transmission Received</h2>
+                        <p className={styles.optionDesc}>
+                            Check your inbox to continue your journey.
+                        </p>
+                    </div>
+                )}
+            </div>
+        </section >
+    );
 }
