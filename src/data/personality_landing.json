@@ -1,0 +1,32 @@
+[
+    {
+        "id": "Q1",
+        "elementId": "Q1",
+        "statement": "How empathetic are you?",
+        "direction": "Standard (+)"
+    },
+    {
+        "id": "Q2",
+        "elementId": "Q2",
+        "statement": "How sociable are you?",
+        "direction": "Standard (+)"
+    },
+    {
+        "id": "Q3",
+        "elementId": "Q3",
+        "statement": "How persistent are you?",
+        "direction": "Standard (+)"
+    },
+    {
+        "id": "Q4",
+        "elementId": "Q4",
+        "statement": "How curious are you?",
+        "direction": "Standard (+)"
+    },
+    {
+        "id": "Q5",
+        "elementId": "Q5",
+        "statement": "How relaxed are you?",
+        "direction": "Standard (+)"
+    }
+]

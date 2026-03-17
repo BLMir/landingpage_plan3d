@@ -9,6 +9,8 @@ interface Planet3DProps {
     currentSection: number;
     tintColor?: string;
     tintOpacity?: number;
+    materialOverride?: 'lamp' | 'silver' | 'darkWood';
+    isStatic?: boolean;
 }
 
 export interface Planet3DHandle {
@@ -46,6 +48,8 @@ const Planet3DInner = forwardRef<Planet3DHandle, Planet3DProps>((props, ref) => 
                             currentSection={props.currentSection}
                             tintColor={props.tintColor}
                             tintOpacity={props.tintOpacity}
+                            materialOverride={props.materialOverride}
+                            isStatic={props.isStatic}
                         />
                     </Suspense>
                 </scene>
