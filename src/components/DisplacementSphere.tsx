@@ -15,7 +15,7 @@ vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
 vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
 vec4 permute(vec4 x) { return mod289(((x * 34.0) + 1.0) * x); }
 vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
-float snoise(vec3 v) {
+float snoise_planet(vec3 v) {
         const vec2  C = vec2(1.0 / 6.0, 1.0 / 3.0);
         const vec4  D = vec4(0.0, 0.5, 1.0, 2.0);
   vec3 i = floor(v + dot(v, C.yyy));
@@ -63,8 +63,22 @@ float snoise(vec3 v) {
     }
     `;
 
+const getGrowthAlphaShader = `
+float getGrowthAlpha_planet(vec3 pos, vec3 seedPoint, float intensity) {
+    vec3 posNorm = normalize(pos);
+    if (intensity <= 0.0) return 0.0;
+    if (intensity >= 1.0) return 1.0;
+    float align = dot(posNorm, normalize(seedPoint));
+    float grad = align * 0.5 + 0.5; 
+    float n = snoise_planet(posNorm * 3.5) * 0.5 + 0.5;
+    float growthMap = mix(grad, n, 0.15); 
+    float threshold = 1.05 - (intensity * 1.10);
+    return smoothstep(threshold, threshold + 0.15, growthMap);
+}
+`;
+
 const growthLogic = `
-float getGrowthAlpha(vec3 pos, vec3 seedPoint, float intensity) {
+float getGrowthAlpha_planet(vec3 pos, vec3 seedPoint, float intensity) {
     vec3 posNorm = normalize(pos);
     if (intensity < 0.001) return 0.0;
     if (intensity >= 1.0) return 1.0;
@@ -72,7 +86,7 @@ float getGrowthAlpha(vec3 pos, vec3 seedPoint, float intensity) {
     float align = dot(posNorm, normalize(seedPoint));
     float grad = align * 0.5 + 0.5; 
     
-    float n = snoise(posNorm * 4.2) * 0.5 + 0.5;
+    float n = snoise_planet(posNorm * 4.2) * 0.5 + 0.5;
     float growthMap = mix(grad, n, 0.25); 
     
     float threshold = 1.15 - (intensity * 1.35);
@@ -83,12 +97,188 @@ float getGrowthAlpha(vec3 pos, vec3 seedPoint, float intensity) {
 // Preload to avoid waterfalls
 useGLTF.preload(getAssetPath('/models/forest.glb'));
 
+const sharedPlanetFragPars = `
+${noisePars}
+uniform float uSliders[5];
+uniform float uTime;
+uniform sampler2D uDesertMap;
+uniform sampler2D uOceanMap;
+uniform vec3 uDesertColor;
+uniform vec3 uOceanColor;
+uniform bool uHasDesertMap;
+uniform bool uHasOceanMap;
+varying vec3 vWorldPos;
+varying vec3 vOriginalPos;
+varying vec2 vCustomUv;
+
+float getGrowthAlpha_planet(vec3 pos, vec3 seedPoint, float intensity) {
+    vec3 posNorm = normalize(pos);
+    if (intensity <= 0.0) return 0.0;
+    if (intensity >= 1.0) return 1.0;
+    float align = dot(posNorm, normalize(seedPoint));
+    float grad = align * 0.5 + 0.5; 
+    float n = snoise_planet(posNorm * 3.5) * 0.5 + 0.5;
+    float growthMap = mix(grad, n, 0.15); 
+    float threshold = 1.05 - (intensity * 1.10);
+    return smoothstep(threshold, threshold + 0.15, growthMap);
+}
+`;
+
+const metalnessLogicChunk = `
+    float s1_m = uSliders[0];
+    float s2_m = uSliders[1];
+    float intenVolcano_m = (s1_m < 0.5) ? (0.5 - s1_m) * 2.0 : 0.0;
+    float intenOcean_m = (s1_m > 0.5) ? (s1_m - 0.5) * 2.0 : 0.0;
+    float intenDesert_m = (s2_m < 0.5) ? (0.5 - s2_m) * 2.0 : 0.0;
+    float intenForest_m = (s2_m > 0.5) ? (s2_m - 0.5) * 2.0 : 0.0;
+    vec3 seedQ1_m = vec3(0.0, 1.0, 0.0);
+    vec3 seedQ2_m = vec3(0.8, -0.5, 0.3);
+    float alphaVolcan_m = getGrowthAlpha_planet(vOriginalPos, seedQ1_m, intenVolcano_m);
+    float alphaOcean_m = getGrowthAlpha_planet(vOriginalPos, seedQ1_m, intenOcean_m);
+    float alphaDesert_m = getGrowthAlpha_planet(vOriginalPos, seedQ2_m, intenDesert_m);
+    float alphaForest_m = getGrowthAlpha_planet(vOriginalPos, seedQ2_m, intenForest_m);
+
+    if (alphaVolcan_m > 0.01) metalnessFactor = mix(metalnessFactor, 0.0, alphaVolcan_m);
+    if (alphaOcean_m > 0.01) metalnessFactor = mix(metalnessFactor, 0.1, alphaOcean_m);
+    if (alphaDesert_m > 0.01) metalnessFactor = mix(metalnessFactor, 0.0, alphaDesert_m);
+    if (alphaForest_m > 0.01) metalnessFactor = mix(metalnessFactor, 0.0, alphaForest_m);
+`;
+
+const roughnessLogicChunk = `
+    float s1_r = uSliders[0];
+    float s2_r = uSliders[1];
+    float intenVolcano_r = (s1_r < 0.5) ? (0.5 - s1_r) * 2.0 : 0.0;
+    float intenOcean_r = (s1_r > 0.5) ? (s1_r - 0.5) * 2.0 : 0.0;
+    float intenDesert_r = (s2_r < 0.5) ? (0.5 - s2_r) * 2.0 : 0.0;
+    float intenForest_r = (s2_r > 0.5) ? (s2_r - 0.5) * 2.0 : 0.0;
+    vec3 seedQ1_r = vec3(0.0, 1.0, 0.0);
+    vec3 seedQ2_r = vec3(0.8, -0.5, 0.3);
+    float alphaVolcan_r = getGrowthAlpha_planet(vOriginalPos, seedQ1_r, intenVolcano_r);
+    float alphaOcean_r = getGrowthAlpha_planet(vOriginalPos, seedQ1_r, intenOcean_r);
+    float alphaDesert_r = getGrowthAlpha_planet(vOriginalPos, seedQ2_r, intenDesert_r);
+    float alphaForest_r = getGrowthAlpha_planet(vOriginalPos, seedQ2_r, intenForest_r);
+
+    if (alphaVolcan_r > 0.01) roughnessFactor = mix(roughnessFactor, 1.0, alphaVolcan_r);
+    if (alphaOcean_r > 0.01) {
+        float rNoise = snoise_planet(vOriginalPos * 4.0 + vec3(uTime * 0.05, 0.0, 0.0)) * 0.5 + 0.5;
+        float finalR = mix(0.01, 0.12, rNoise);
+        roughnessFactor = mix(roughnessFactor, finalR, alphaOcean_r);
+    }
+    if (alphaDesert_r > 0.01) roughnessFactor = mix(roughnessFactor, 1.0, alphaDesert_r);
+    if (alphaForest_r > 0.01) roughnessFactor = mix(roughnessFactor, 0.8, alphaForest_r);
+`;
+
+const sharedPlanetFragLogic = `
+vec3 mixedDiffuse = diffuseColor.rgb;
+float s1 = uSliders[0];
+float s2 = uSliders[1];
+float intenVolcano = (s1 < 0.5) ? (0.5 - s1) * 2.0 : 0.0;
+float intenOcean = (s1 > 0.5) ? (s1 - 0.5) * 2.0 : 0.0;
+float intenDesert = (s2 < 0.5) ? (0.5 - s2) * 2.0 : 0.0;
+float intenForest = (s2 > 0.5) ? (s2 - 0.5) * 2.0 : 0.0;
+
+vec3 seedQ1 = vec3(0.0, 1.0, 0.0);
+vec3 seedQ2 = vec3(0.8, -0.5, 0.3);
+float alphaVolcan = getGrowthAlpha_planet(vOriginalPos, seedQ1, intenVolcano);
+float alphaOcean = getGrowthAlpha_planet(vOriginalPos, seedQ1, intenOcean);
+float alphaDesert = getGrowthAlpha_planet(vOriginalPos, seedQ2, intenDesert);
+float alphaForest = getGrowthAlpha_planet(vOriginalPos, seedQ2, intenForest);
+
+if (alphaVolcan > 0.05) {
+    float rockNoise = snoise_planet(vOriginalPos * 10.0 + vec3(10.0)); 
+    vec3 rockDark = vec3(0.03, 0.03, 0.03);
+    vec3 rockBrown = vec3(0.08, 0.06, 0.04);
+    vec3 finalRock = mix(rockDark, rockBrown, rockNoise * 0.5 + 0.5);
+    float noiseFlow = snoise_planet(vOriginalPos * 0.3 + vec3(0.0, uTime * 0.1, 0.0));
+    float ridges = 1.0 - abs(noiseFlow); 
+    float river = smoothstep(0.85, 0.98, ridges);
+    vec3 magmaRed = vec3(0.8, 0.0, 0.0);
+    vec3 magmaBright = vec3(1.5, 0.1, 0.0);
+    float pulse = snoise_planet(vOriginalPos * 3.0 + vec3(uTime * 2.0)) * 0.5 + 0.5;
+    vec3 mixedMagma = mix(magmaRed, magmaBright, pulse);
+    vec3 volcanoBase = mix(finalRock, mixedMagma, river);
+    mixedDiffuse = mix(mixedDiffuse, volcanoBase, alphaVolcan);
+}
+if (alphaOcean > 0.001) {
+    vec3 oBase = uOceanColor;
+    if (uHasOceanMap) {
+        vec3 oTex = texture2D(uOceanMap, vCustomUv).rgb;
+        oBase = mix(oBase, oBase * oTex, 0.85); 
+    }
+    vec3 oceanCyan = vec3(0.01, 0.42, 0.55);
+    vec3 oceanTurquoise = vec3(0.02, 0.65, 0.58);
+    float colorMixNoise = snoise_planet(vOriginalPos * 0.8 + 12.3) * 0.5 + 0.5;
+    float colorMixNoise2 = snoise_planet(vOriginalPos * 0.4 - 5.0 + uTime * 0.02) * 0.5 + 0.5;
+    oBase = mix(oBase, oceanCyan, colorMixNoise * 0.6);
+    oBase = mix(oBase, oceanTurquoise, colorMixNoise2 * 0.3);
+    float waveNoise = snoise_planet(vOriginalPos * 0.25 + vec3(0.0, uTime * 0.12, 0.0));
+    float waveRidges = 1.0 - abs(waveNoise);
+    float waveLines = smoothstep(0.88, 0.99, waveRidges);
+    vec3 foamColor = vec3(0.95, 1.0, 1.0);
+    oBase = mix(oBase, foamColor, waveLines * 0.6);
+    mixedDiffuse = mix(mixedDiffuse, oBase, alphaOcean);
+}
+if (alphaDesert > 0.001) {
+    vec3 dBase = uDesertColor;
+    if (uHasDesertMap) {
+        vec3 dTex = texture2D(uDesertMap, vCustomUv).rgb;
+        dBase = mix(dBase, dBase * dTex, 0.85);
+    }
+    float sandGrains = snoise_planet(vOriginalPos * 250.0) * 0.04;
+    float ripples = snoise_planet(vOriginalPos * 15.0) * 0.03;
+    dBase += sandGrains + ripples;
+    mixedDiffuse = mix(mixedDiffuse, dBase, alphaDesert);
+}
+if (alphaForest > 0.001) {
+    vec3 deepForest  = vec3(0.01, 0.12, 0.08);
+    vec3 healthyLeaf = vec3(0.05, 0.35, 0.12);
+    vec3 pineBlue    = vec3(0.05, 0.25, 0.30);
+    vec3 dirtColor   = vec3(0.12, 0.08, 0.05);
+    float groundN = snoise_planet(vOriginalPos * 12.0) * 0.5 + 0.5;
+    float patches = snoise_planet(vOriginalPos * 4.0) * 0.5 + 0.5;
+    float mossN = snoise_planet(vOriginalPos * 25.0) * 0.5 + 0.5;
+    vec3 baseFloor = mix(deepForest, healthyLeaf, groundN);
+    baseFloor = mix(baseFloor, pineBlue, patches * 0.4);
+    float dirtMask = smoothstep(0.3, 0.1, groundN * patches);
+    baseFloor = mix(baseFloor, dirtColor, dirtMask * 0.6);
+    baseFloor = mix(baseFloor, baseFloor * 1.2, mossN * 0.2);
+    mixedDiffuse = mix(mixedDiffuse, baseFloor, alphaForest);
+}
+diffuseColor.rgb = mixedDiffuse;
+`;
+
 interface DisplacementSphereProps {
     values: number[];
     currentSection: number;
     tintColor?: string;
     tintOpacity?: number;
+    materialOverride?: 'lamp' | 'silver' | 'darkWood';
+    isStatic?: boolean;
 }
+
+// --- ARTIFACT TRANSFORMS (Exposed for easy manipulation) ---
+const ARTIFACT_TRANSFORMS: Record<string, { position: [number, number, number], rotation: [number, number, number], scale: number }> = {
+    default: {
+        position: [0, 0, 0],
+        rotation: [0, 0, 0],
+        scale: 1.0
+    },
+    lamp: {
+        position: [0, -2, 0],
+        rotation: [0, 0, 0],
+        scale: 1.15
+    },
+    silver: {
+        position: [-0.25, -3, 0],
+        rotation: [0, 0, 0],
+        scale: 0.8
+    },
+    darkWood: {
+        position: [0, -4.1, 0],
+        rotation: [0, 0, 0],
+        scale: 0.8
+    }
+};
 
 // --- BUTTERFLY PARTICLES ---
 // --- BUTTERFLY/FIREFLY SHADERS ---
@@ -114,7 +304,7 @@ const butterflyVertexShader = `
         
         // Gradient and noise for reveal
         float grad = align * 0.5 + 0.5; 
-        float n = snoise(posNorm * 3.5) * 0.5 + 0.5;
+        float n = snoise_planet(posNorm * 3.5) * 0.5 + 0.5;
         float growthMap = mix(grad, n, 0.2); 
         
         // Sharper reveal threshold
@@ -161,16 +351,16 @@ const cometFragmentShader = `
         float speed = uTime * 0.2;
         
         // Procedural rivers and ridges
-        float noiseFlow = snoise(vec3(uv * 1.0, speed));
+        float noiseFlow = snoise_planet(vec3(uv * 1.0, speed));
         float ridges = 1.0 - abs(noiseFlow); 
         float river = smoothstep(0.65, 0.9, ridges);
         
         // Rocky noise for crust texture
-        float rockyNoise = snoise(vec3(uv * 4.0, uTime * 0.05)) * 0.5 + 0.5;
+        float rockyNoise = snoise_planet(vec3(uv * 4.0, uTime * 0.05)) * 0.5 + 0.5;
         rockyNoise = pow(rockyNoise, 2.0);
         
         // Pulsing core effect
-        float pulse = snoise(vPos * 0.5 + vec3(uTime * 1.2)) * 0.5 + 0.5;
+        float pulse = snoise_planet(vPos * 0.5 + vec3(uTime * 1.2)) * 0.5 + 0.5;
         
         // Mix colors based on procedural features
         vec3 crust = lightBlueRock * (0.5 + 0.5 * rockyNoise);
@@ -218,7 +408,7 @@ const cloudFragmentShader = `
         vec3 color = vec3(1.0);
         
         // Smoky effect: slow-moving noise that darkens slightly as uStorm increases
-        float smoke = snoise(vec3(vUv * 4.0, uTime * 0.2)) * 0.5 + 0.5;
+        float smoke = snoise_planet(vec3(vUv * 4.0, uTime * 0.2)) * 0.5 + 0.5;
         // At uStorm:1.0 (slider:0%), color can dip to ~0.75 for a "cloudy/greyish" look
         float smokeAmount = mix(1.0, 0.75 + 0.25 * smoke, uStorm);
         color *= smokeAmount;
@@ -278,7 +468,7 @@ const windVertexShader = `
         vec3 posNorm = normalize(pos);
         float align = dot(posNorm, normalize(seedPoint));
         float grad = align * 0.5 + 0.5; 
-        float n = snoise(posNorm * 3.5) * 0.5 + 0.5;
+        float n = snoise_planet(posNorm * 3.5) * 0.5 + 0.5;
         float growthMap = mix(grad, n, 0.15); 
         float threshold = 1.05 - (intensity * 1.10);
         return smoothstep(threshold, threshold + 0.15, growthMap);
@@ -565,7 +755,9 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
     values,
     currentSection,
     tintColor,
-    tintOpacity
+    tintOpacity,
+    materialOverride,
+    isStatic
 }) => {
     const base = useFBX(getAssetPath('/models/base.fbx'));
     const { scene: cometTemplateScene } = useGLTF(getAssetPath('/models/comet_single.glb'));
@@ -574,15 +766,27 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
     const forestGLTF = useGLTF(getAssetPath('/models/forest.glb'));
     const ringFBX = useFBX(getAssetPath('/models/Ring.fbx'));
     const cloudsFBX = useFBX(getAssetPath('/models/Clouds.fbx'));
+    const cloudsClone = useMemo(() => {
+        const c = cloudsFBX.clone();
+        c.traverse((child) => {
+            if ((child as THREE.Mesh).isMesh) {
+                const mesh = child as THREE.Mesh;
+                mesh.material = (mesh.material as THREE.Material).clone();
+            }
+        });
+        return c;
+    }, [cloudsFBX]);
 
     // Load textures for rings
-    const [moonTex, martianTex, stripesTex, magmaTex, rockyMarsTex, ring0Tex] = useTexture([
+    const [moonTex, martianTex, stripesTex, magmaTex, rockyMarsTex, ring0Tex, desertTex, oceanTex] = useTexture([
         getAssetPath('/textures/rings/moon.png'),
         getAssetPath('/textures/rings/martian.png'),
         getAssetPath('/textures/rings/stripes.png'),
         getAssetPath('/textures/rings/magma.png'),
         getAssetPath('/textures/rings/mars_rocky.png'),
-        getAssetPath('/textures/rings/ring0_ochre.png')
+        getAssetPath('/textures/rings/ring0_ochre.png'),
+        getAssetPath('/1_Quiz Planet Images/each_element/desert.png'),
+        getAssetPath('/1_Quiz Planet Images/each_element/oceans.png')
     ]);
 
     // Setup planetary textures for full wrapping
@@ -641,16 +845,16 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
                         vec2 tiledUv = vUv * 3.0; 
                         
                         // Broader volcan-style ridges for smoother rivers
-                        float noiseFlow = snoise(vec3(tiledUv * 1.0, uTime * 0.15));
+                        float noiseFlow = snoise_planet(vec3(tiledUv * 1.0, uTime * 0.15));
                         float ridges = 1.0 - abs(noiseFlow); 
                         float river = smoothstep(0.7, 0.9, ridges);
                         
                         // Rocky logic: adjusted frequency for larger scale
-                        float rockyNoise = snoise(vec3(tiledUv * 3.0, uTime * 0.05)) * 0.5 + 0.5;
+                        float rockyNoise = snoise_planet(vec3(tiledUv * 3.0, uTime * 0.05)) * 0.5 + 0.5;
                         rockyNoise = pow(rockyNoise, 2.5); 
                         
                         // Pulse logic
-                        float pulseN = snoise(vPos * 0.3 + vec3(uTime * 1.5)) * 0.5 + 0.5;
+                        float pulseN = snoise_planet(vPos * 0.3 + vec3(uTime * 1.5)) * 0.5 + 0.5;
                         
                         // Vibrant Orange/Gold Palette
                         vec3 crustOrange = vec3(0.65, 0.2, 0.0) * (0.3 + 0.7 * rockyNoise);
@@ -748,16 +952,16 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
                         vec2 tiledUv = vUv * 3.0; 
                         
                         // Broader volcan-style ridges for smoother rivers
-                        float noiseFlow = snoise(vec3(tiledUv * 1.0, uTime * 0.15));
+                        float noiseFlow = snoise_planet(vec3(tiledUv * 1.0, uTime * 0.15));
                         float ridges = 1.0 - abs(noiseFlow); 
                         float river = smoothstep(0.7, 0.9, ridges);
                         
                         // Rocky logic: adjusted frequency for larger scale
-                        float rockyNoise = snoise(vec3(tiledUv * 3.0, uTime * 0.05)) * 0.5 + 0.5;
+                        float rockyNoise = snoise_planet(vec3(tiledUv * 3.0, uTime * 0.05)) * 0.5 + 0.5;
                         rockyNoise = pow(rockyNoise, 2.5); 
                         
                         // Pulse logic
-                        float pulseN = snoise(vPos * 0.3 + vec3(uTime * 1.5)) * 0.5 + 0.5;
+                        float pulseN = snoise_planet(vPos * 0.3 + vec3(uTime * 1.5)) * 0.5 + 0.5;
                         
                         // Vibrant Orange/Gold Palette
                         vec3 crustOrange = vec3(0.65, 0.2, 0.0) * (0.3 + 0.7 * rockyNoise);
@@ -793,9 +997,389 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
                 side: THREE.DoubleSide,
                 depthTest: true,
                 depthWrite: false
-            })
+            }),
+            lamp: new THREE.MeshPhysicalMaterial({
+                color: tintColor || '#ffffff',
+                transmission: 0.8,
+                roughness: 0.1,
+                metalness: 0.0,
+                thickness: 0.5,
+                ior: 1.5,
+                emissive: tintColor || '#ffffff',
+                emissiveIntensity: 0.5,
+                transparent: true,
+                side: THREE.DoubleSide
+            }),
+            silver: new THREE.MeshStandardMaterial({
+                color: '#4a4a4b', // Darker silver
+                metalness: 0.95,
+                roughness: 0.15,
+                side: THREE.DoubleSide
+            }),
+            darkWood: new THREE.MeshStandardMaterial({
+                color: '#3d2b1f', // Dark walnut/espresso
+                metalness: 0.1,
+                roughness: 0.8,
+                side: THREE.DoubleSide
+            }),
+            // --- THEME OVERRIDES FOR COMETS ---
+            cometLamp: new THREE.MeshPhysicalMaterial({
+                color: tintColor || '#ffffff',
+                transmission: 0.8,
+                roughness: 0.1,
+                metalness: 0.0,
+                thickness: 0.5,
+                ior: 1.5,
+                emissive: tintColor || '#ffffff',
+                emissiveIntensity: 0.5,
+                transparent: true,
+                side: THREE.DoubleSide,
+                // @ts-ignore
+                morphTargets: true
+            }),
+            cometSilver: new THREE.MeshStandardMaterial({
+                color: '#4a4a4b', metalness: 0.95, roughness: 0.15, side: THREE.DoubleSide,
+                // @ts-ignore
+                morphTargets: true
+            }),
+            cometDarkWood: new THREE.MeshStandardMaterial({
+                color: '#3d2b1f', metalness: 0.1, roughness: 0.8, side: THREE.DoubleSide,
+                // @ts-ignore
+                morphTargets: true
+            }),
+            // --- THEME OVERRIDES FOR RINGS ---
+            ringLamp: new THREE.MeshPhysicalMaterial({
+                color: tintColor || '#ffffff',
+                transmission: 0.8,
+                roughness: 0.1,
+                metalness: 0.0,
+                thickness: 0.5,
+                ior: 1.5,
+                emissive: tintColor || '#ffffff',
+                emissiveIntensity: 0.5,
+                transparent: true,
+                side: THREE.DoubleSide
+            }),
+            ringSilver: new THREE.MeshStandardMaterial({
+                color: '#4a4a4b', metalness: 0.95, roughness: 0.15, side: THREE.DoubleSide
+            }),
+            ringDarkWood: new THREE.MeshStandardMaterial({
+                color: '#3d2b1f', metalness: 0.1, roughness: 0.8, side: THREE.DoubleSide
+            }),
+            // --- BASE ARTIFACT MATERIALS (WITH DISPLACEMENT) ---
+            baseLamp: (() => {
+                const m = new THREE.MeshPhysicalMaterial({
+                    color: tintColor || '#ffffff',
+                    transmission: 0.8,
+                    roughness: 0.1,
+                    metalness: 0.0,
+                    thickness: 0.5,
+                    ior: 1.5,
+                    emissive: tintColor || '#ffffff',
+                    emissiveIntensity: 0.5,
+                    transparent: true,
+                    side: THREE.FrontSide
+                });
+                // @ts-ignore
+                m.morphTargets = true;
+                // @ts-ignore
+                m.morphNormals = true;
+                m.onBeforeCompile = (shader) => {
+                    shader.uniforms.uSliders = customUniforms.current.uSliders;
+                    shader.uniforms.uIndices = customUniforms.current.uIndices;
+                    shader.uniforms.uTime = customUniforms.current.uTime;
+                    shader.uniforms.uDesertMap = customUniforms.current.uDesertMap;
+                    shader.uniforms.uOceanMap = customUniforms.current.uOceanMap;
+                    shader.uniforms.uHasDesertMap = customUniforms.current.uHasDesertMap;
+                    shader.uniforms.uHasOceanMap = customUniforms.current.uHasOceanMap;
+                    shader.uniforms.uDesertColor = customUniforms.current.uDesertColor;
+                    shader.uniforms.uOceanColor = customUniforms.current.uOceanColor;
+
+                    shader.vertexShader = `uniform float uSliders[5];
+uniform int uIndices[8];
+varying vec3 vOriginalPos;
+varying vec3 vWorldPos;
+varying vec2 vCustomUv;
+${noisePars}
+${getGrowthAlphaShader}
+` + shader.vertexShader;
+                    const morphChunk = THREE.ShaderChunk['morphtarget_vertex'];
+                    const displacementLogic = `
+vCustomUv = uv;
+vOriginalPos = position;
+float s1 = uSliders[0];
+float s2 = uSliders[1];
+float intenVolcano = (s1 < 0.5) ? (0.5 - s1) * 2.0 : 0.0;
+float intenOcean = (s1 > 0.5) ? (s1 - 0.5) * 2.0 : 0.0;
+float intenDesert = (s2 < 0.5) ? (0.5 - s2) * 2.0 : 0.0;
+float intenForest = (s2 > 0.5) ? (s2 - 0.5) * 2.0 : 0.0;
+vec3 p1 = vec3(0.0, 1.0, 0.0); vec3 p2 = vec3(0.8, -0.5, 0.3);
+float aV = getGrowthAlpha_planet(transformed, p1, intenVolcano);
+float aO = getGrowthAlpha_planet(transformed, p1, intenOcean);
+float aD = getGrowthAlpha_planet(transformed, p2, intenDesert);
+float aF = getGrowthAlpha_planet(transformed, p2, intenForest);
+float maskD = aD * (1.0 - aF); float maskO = aO * (1.0 - aV) * (1.0 - aD) * (1.0 - aF); float maskV = aV * (1.0 - aO) * (1.0 - aD) * (1.0 - aF);
+float maskedInfluences[8]; for (int i = 0; i < 8; i++) maskedInfluences[i] = 0.0;
+for (int i = 0; i < 8; i++) { int type = uIndices[i]; if (type == 0) maskedInfluences[i] = maskD * 1.8; else if (type == 1) maskedInfluences[i] = maskO * 1.8; else if (type == 2) maskedInfluences[i] = maskV * 1.8; else if (type == 3) maskedInfluences[i] = aF * 1.8; }
+${morphChunk.replace(/morphTargetInfluences/g, 'maskedInfluences')}
+vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
+`;
+                    shader.vertexShader = shader.vertexShader.replace('#include <morphtarget_vertex>', displacementLogic);
+                    shader.fragmentShader = sharedPlanetFragPars + shader.fragmentShader;
+                    const normalLogic = `
+#include <normal_fragment_begin>
+normal = normalize(cross(dFdx(vWorldPos), dFdy(vWorldPos)));
+nonPerturbedNormal = normal;
+`;
+                    shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_begin>', normalLogic);
+                    shader.fragmentShader = shader.fragmentShader.replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>\n${metalnessLogicChunk}`);
+                    shader.fragmentShader = shader.fragmentShader.replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\n${roughnessLogicChunk}`);
+                    shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', sharedPlanetFragLogic);
+                    m.userData.shader = shader;
+                };
+                return m;
+            })(),
+            baseSilver: (() => {
+                const m = new THREE.MeshStandardMaterial({
+                    color: '#4a4a4b', metalness: 0.95, roughness: 0.15, side: THREE.FrontSide
+                });
+                // @ts-ignore
+                m.morphTargets = true;
+                // @ts-ignore
+                m.morphNormals = true;
+                m.onBeforeCompile = (shader) => {
+                    shader.uniforms.uSliders = customUniforms.current.uSliders;
+                    shader.uniforms.uIndices = customUniforms.current.uIndices;
+                    shader.uniforms.uTime = customUniforms.current.uTime;
+                    shader.uniforms.uDesertMap = customUniforms.current.uDesertMap;
+                    shader.uniforms.uOceanMap = customUniforms.current.uOceanMap;
+                    shader.uniforms.uHasDesertMap = customUniforms.current.uHasDesertMap;
+                    shader.uniforms.uHasOceanMap = customUniforms.current.uHasOceanMap;
+                    shader.uniforms.uDesertColor = customUniforms.current.uDesertColor;
+                    shader.uniforms.uOceanColor = customUniforms.current.uOceanColor;
+
+                    shader.vertexShader = `uniform float uSliders[5];
+uniform int uIndices[8];
+varying vec3 vOriginalPos;
+varying vec3 vWorldPos;
+varying vec2 vCustomUv;
+${noisePars}
+${getGrowthAlphaShader}
+` + shader.vertexShader;
+                    const morphChunk = THREE.ShaderChunk['morphtarget_vertex'];
+                    const displacementLogic = `
+vCustomUv = uv;
+vOriginalPos = position;
+float s1 = uSliders[0];
+float s2 = uSliders[1];
+float intenVolcano = (s1 < 0.5) ? (0.5 - s1) * 2.0 : 0.0;
+float intenOcean = (s1 > 0.5) ? (s1 - 0.5) * 2.0 : 0.0;
+float intenDesert = (s2 < 0.5) ? (0.5 - s2) * 2.0 : 0.0;
+float intenForest = (s2 > 0.5) ? (s2 - 0.5) * 2.0 : 0.0;
+vec3 p1 = vec3(0.0, 1.0, 0.0); vec3 p2 = vec3(0.8, -0.5, 0.3);
+float aV = getGrowthAlpha_planet(transformed, p1, intenVolcano);
+float aO = getGrowthAlpha_planet(transformed, p1, intenOcean);
+float aD = getGrowthAlpha_planet(transformed, p2, intenDesert);
+float aF = getGrowthAlpha_planet(transformed, p2, intenForest);
+float maskD = aD * (1.0 - aF); float maskO = aO * (1.0 - aV) * (1.0 - aD) * (1.0 - aF); float maskV = aV * (1.0 - aO) * (1.0 - aD) * (1.0 - aF);
+float maskedInfluences[8]; for (int i = 0; i < 8; i++) maskedInfluences[i] = 0.0;
+for (int i = 0; i < 8; i++) { int type = uIndices[i]; if (type == 0) maskedInfluences[i] = maskD * 1.8; else if (type == 1) maskedInfluences[i] = maskO * 1.8; else if (type == 2) maskedInfluences[i] = maskV * 1.8; else if (type == 3) maskedInfluences[i] = aF * 1.8; }
+${morphChunk.replace(/morphTargetInfluences/g, 'maskedInfluences')}
+vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
+`;
+                    shader.vertexShader = shader.vertexShader.replace('#include <morphtarget_vertex>', displacementLogic);
+                    shader.fragmentShader = sharedPlanetFragPars + shader.fragmentShader;
+                    const normalLogic = `
+#include <normal_fragment_begin>
+normal = normalize(cross(dFdx(vWorldPos), dFdy(vWorldPos)));
+nonPerturbedNormal = normal;
+`;
+                    shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_begin>', normalLogic);
+                    shader.fragmentShader = shader.fragmentShader.replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>\n${metalnessLogicChunk}`);
+                    shader.fragmentShader = shader.fragmentShader.replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\n${roughnessLogicChunk}`);
+                    shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', sharedPlanetFragLogic);
+                    m.userData.shader = shader;
+                };
+                return m;
+            })(),
+            baseDarkWood: (() => {
+                const m = new THREE.MeshStandardMaterial({
+                    color: '#3d2b1f', metalness: 0.1, roughness: 0.8, side: THREE.FrontSide
+                });
+                // @ts-ignore
+                m.morphTargets = true;
+                // @ts-ignore
+                m.morphNormals = true;
+                m.onBeforeCompile = (shader) => {
+                    shader.uniforms.uSliders = customUniforms.current.uSliders;
+                    shader.uniforms.uIndices = customUniforms.current.uIndices;
+                    shader.uniforms.uTime = customUniforms.current.uTime;
+                    shader.uniforms.uDesertMap = customUniforms.current.uDesertMap;
+                    shader.uniforms.uOceanMap = customUniforms.current.uOceanMap;
+                    shader.uniforms.uHasDesertMap = customUniforms.current.uHasDesertMap;
+                    shader.uniforms.uHasOceanMap = customUniforms.current.uHasOceanMap;
+                    shader.uniforms.uDesertColor = customUniforms.current.uDesertColor;
+                    shader.uniforms.uOceanColor = customUniforms.current.uOceanColor;
+
+                    shader.vertexShader = `uniform float uSliders[5];
+uniform int uIndices[8];
+varying vec3 vOriginalPos;
+varying vec3 vWorldPos;
+varying vec2 vCustomUv;
+${noisePars}
+${getGrowthAlphaShader}
+` + shader.vertexShader;
+                    const morphChunk = THREE.ShaderChunk['morphtarget_vertex'];
+                    const displacementLogic = `
+vCustomUv = uv;
+vOriginalPos = position;
+float s1 = uSliders[0];
+float s2 = uSliders[1];
+float intenVolcano = (s1 < 0.5) ? (0.5 - s1) * 2.0 : 0.0;
+float intenOcean = (s1 > 0.5) ? (s1 - 0.5) * 2.0 : 0.0;
+float intenDesert = (s2 < 0.5) ? (0.5 - s2) * 2.0 : 0.0;
+float intenForest = (s2 > 0.5) ? (s2 - 0.5) * 2.0 : 0.0;
+vec3 p1 = vec3(0.0, 1.0, 0.0); vec3 p2 = vec3(0.8, -0.5, 0.3);
+float aV = getGrowthAlpha_planet(transformed, p1, intenVolcano);
+float aO = getGrowthAlpha_planet(transformed, p1, intenOcean);
+float aD = getGrowthAlpha_planet(transformed, p2, intenDesert);
+float aF = getGrowthAlpha_planet(transformed, p2, intenForest);
+float maskD = aD * (1.0 - aF); float maskO = aO * (1.0 - aV) * (1.0 - aD) * (1.0 - aF); float maskV = aV * (1.0 - aO) * (1.0 - aD) * (1.0 - aF);
+float maskedInfluences[8]; for (int i = 0; i < 8; i++) maskedInfluences[i] = 0.0;
+for (int i = 0; i < 8; i++) { int type = uIndices[i]; if (type == 0) maskedInfluences[i] = maskD * 1.8; else if (type == 1) maskedInfluences[i] = maskO * 1.8; else if (type == 2) maskedInfluences[i] = maskV * 1.8; else if (type == 3) maskedInfluences[i] = aF * 1.8; }
+${morphChunk.replace(/morphTargetInfluences/g, 'maskedInfluences')}
+vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
+`;
+                    shader.vertexShader = shader.vertexShader.replace('#include <morphtarget_vertex>', displacementLogic);
+                    shader.fragmentShader = sharedPlanetFragPars + shader.fragmentShader;
+                    const normalLogic = `
+#include <normal_fragment_begin>
+normal = normalize(cross(dFdx(vWorldPos), dFdy(vWorldPos)));
+nonPerturbedNormal = normal;
+`;
+                    shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_begin>', normalLogic);
+                    shader.fragmentShader = shader.fragmentShader.replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>\n${metalnessLogicChunk}`);
+                    shader.fragmentShader = shader.fragmentShader.replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\n${roughnessLogicChunk}`);
+                    shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', sharedPlanetFragLogic);
+                    m.userData.shader = shader;
+                };
+                return m;
+            })(),
+            // --- CLOUD ARTIFACT MATERIALS (WITH BETTER VISIBILITY & SHADER CONSISTENCY) ---
+            cloudLamp: (() => {
+                const m = new THREE.ShaderMaterial({
+                    uniforms: {
+                        uTime: { value: 0 },
+                        uStorm: { value: 0 },
+                        uCloudColor: { value: new THREE.Color(tintColor || '#ffffff') },
+                        uCloudOpacity: { value: 0.6 }
+                    },
+                    vertexShader: cloudVertexShader,
+                    fragmentShader: `uniform vec3 uCloudColor;\nuniform float uCloudOpacity;\n` + cloudFragmentShader.replace('gl_FragColor = vec4(color, alpha);', 'gl_FragColor = vec4(color * uCloudColor, alpha * uCloudOpacity);'),
+                    transparent: true,
+                    side: THREE.DoubleSide,
+                    depthTest: true,
+                    depthWrite: false
+                });
+                return m;
+            })(),
+            cloudSilver: (() => {
+                const m = new THREE.ShaderMaterial({
+                    uniforms: {
+                        uTime: { value: 0 },
+                        uStorm: { value: 0 },
+                        uCloudColor: { value: new THREE.Color('#4a4a4b') },
+                        uCloudOpacity: { value: 0.7 }
+                    },
+                    vertexShader: cloudVertexShader,
+                    fragmentShader: `uniform vec3 uCloudColor;\nuniform float uCloudOpacity;\n` + cloudFragmentShader.replace('gl_FragColor = vec4(color, alpha);', 'gl_FragColor = vec4(color * uCloudColor, alpha * uCloudOpacity);'),
+                    transparent: true,
+                    side: THREE.DoubleSide,
+                    depthTest: true,
+                    depthWrite: false
+                });
+                return m;
+            })(),
+            cloudDarkWood: (() => {
+                const m = new THREE.ShaderMaterial({
+                    uniforms: {
+                        uTime: { value: 0 },
+                        uStorm: { value: 0 },
+                        uCloudColor: { value: new THREE.Color('#3d2b1f') },
+                        uCloudOpacity: { value: 0.7 }
+                    },
+                    vertexShader: cloudVertexShader,
+                    fragmentShader: `uniform vec3 uCloudColor;\nuniform float uCloudOpacity;\n` + cloudFragmentShader.replace('gl_FragColor = vec4(color, alpha);', 'gl_FragColor = vec4(color * uCloudColor, alpha * uCloudOpacity);'),
+                    transparent: true,
+                    side: THREE.DoubleSide,
+                    depthTest: true,
+                    depthWrite: false
+                });
+                return m;
+            })(),
+            // --- FOREST ARTIFACT MATERIALS (WITH MASKING) ---
+            forestLamp: (() => {
+                const m = new THREE.MeshPhysicalMaterial({
+                    color: tintColor || '#ffffff',
+                    transmission: 0.8,
+                    roughness: 0.1,
+                    metalness: 0.0,
+                    thickness: 0.5,
+                    ior: 1.5,
+                    emissive: tintColor || '#ffffff',
+                    emissiveIntensity: 0.5,
+                    transparent: true,
+                    side: THREE.FrontSide
+                });
+                m.onBeforeCompile = (shader) => {
+                    shader.uniforms.uSliders = customUniforms.current.uSliders;
+                    shader.uniforms.uTime = customUniforms.current.uTime;
+                    shader.vertexShader = `uniform float uSliders[5];\nvarying vec3 vOriginalPos;\n${noisePars}\n${getGrowthAlphaShader}\n` + shader.vertexShader;
+                    shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>\nvOriginalPos = position;\nfloat intenForest_v = (uSliders[1] > 0.5) ? (uSliders[1] - 0.5) * 2.0 : 0.0;\nfloat maskF_v = getGrowthAlpha_planet(transformed, vec3(0.8, -0.5, 0.3), intenForest_v);\ntransformed *= mix(0.0001, 1.0, maskF_v);\n`);
+                    shader.fragmentShader = `uniform float uSliders[5];\nvarying vec3 vOriginalPos;\n${noisePars}\n${getGrowthAlphaShader}\n` + shader.fragmentShader;
+                    shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>\nfloat s2_f = uSliders[1];\nfloat intenForest_f = (s2_f > 0.5) ? (s2_f - 0.5) * 2.0 : 0.0;\nfloat maskF = getGrowthAlpha_planet(vOriginalPos, vec3(0.8, -0.5, 0.3), intenForest_f);\nif (maskF < 0.001) discard;\n`);
+                    m.userData.shader = shader;
+                };
+                return m;
+            })(),
+            forestSilver: (() => {
+                const m = new THREE.MeshStandardMaterial({
+                    color: '#4a4a4b',
+                    metalness: 0.95,
+                    roughness: 0.15,
+                    side: THREE.FrontSide
+                });
+                m.onBeforeCompile = (shader) => {
+                    shader.uniforms.uSliders = customUniforms.current.uSliders;
+                    shader.uniforms.uTime = customUniforms.current.uTime;
+                    shader.vertexShader = `uniform float uSliders[5];\nvarying vec3 vOriginalPos;\n${noisePars}\n${getGrowthAlphaShader}\n` + shader.vertexShader;
+                    shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>\nvOriginalPos = position;\nfloat intenForest_v = (uSliders[1] > 0.5) ? (uSliders[1] - 0.5) * 2.0 : 0.0;\nfloat maskF_v = getGrowthAlpha_planet(transformed, vec3(0.8, -0.5, 0.3), intenForest_v);\ntransformed *= mix(0.0001, 1.0, maskF_v);\n`);
+                    shader.fragmentShader = `uniform float uSliders[5];\nvarying vec3 vOriginalPos;\n${noisePars}\n${getGrowthAlphaShader}\n` + shader.fragmentShader;
+                    shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>\nfloat s2_f = uSliders[1];\nfloat intenForest_f = (s2_f > 0.5) ? (s2_f - 0.5) * 2.0 : 0.0;\nfloat maskF = getGrowthAlpha_planet(vOriginalPos, vec3(0.8, -0.5, 0.3), intenForest_f);\nif (maskF < 0.001) discard;\n`);
+                    m.userData.shader = shader;
+                };
+                return m;
+            })(),
+            forestDarkWood: (() => {
+                const m = new THREE.MeshStandardMaterial({
+                    color: '#3d2b1f',
+                    metalness: 0.1,
+                    roughness: 0.8,
+                    side: THREE.FrontSide
+                });
+                m.onBeforeCompile = (shader) => {
+                    shader.uniforms.uSliders = customUniforms.current.uSliders;
+                    shader.uniforms.uTime = customUniforms.current.uTime;
+                    shader.vertexShader = `uniform float uSliders[5];\nvarying vec3 vOriginalPos;\n${noisePars}\n${getGrowthAlphaShader}\n` + shader.vertexShader;
+                    shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>\nvOriginalPos = position;\nfloat intenForest_v = (uSliders[1] > 0.5) ? (uSliders[1] - 0.5) * 2.0 : 0.0;\nfloat maskF_v = getGrowthAlpha_planet(transformed, vec3(0.8, -0.5, 0.3), intenForest_v);\ntransformed *= mix(0.0001, 1.0, maskF_v);\n`);
+                    shader.fragmentShader = `uniform float uSliders[5];\nvarying vec3 vOriginalPos;\n${noisePars}\n${getGrowthAlphaShader}\n` + shader.fragmentShader;
+                    shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>\nfloat s2_f = uSliders[1];\nfloat intenForest_f = (s2_f > 0.5) ? (s2_f - 0.5) * 2.0 : 0.0;\nfloat maskF = getGrowthAlpha_planet(vOriginalPos, vec3(0.8, -0.5, 0.3), intenForest_f);\nif (maskF < 0.001) discard;\n`);
+                    m.userData.shader = shader;
+                };
+                return m;
+            })()
         };
-    }, [moonTex, martianTex, stripesTex, magmaTex, rockyMarsTex, ring0Tex]);
+    }, [moonTex, martianTex, stripesTex, magmaTex, rockyMarsTex, ring0Tex, tintColor]);
     // const forest = forestGLTF.scene; // Unused for now
 
     // Create clones for overlays
@@ -814,15 +1398,16 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
     const cometInstances = useMemo(() => {
         const instances: THREE.Group[] = [];
         const count = 10;
-        const radius = 300; // Increased from 220 to ensure they are outside the planet surface
+        const radius = 190; // Reduced from 300 to bring closer to surface
 
         for (let i = 0; i < count; i++) {
             // Clone the entire template scene as a group
             const group = cometTemplateScene.clone();
 
-            // Random distribution around the sphere
-            const theta = Math.acos((Math.random() * 2) - 1);
-            const phi = Math.random() * Math.PI * 2;
+            // DETERMINISTIC distribution around the sphere (no Math.random)
+            // Using i as a seed for repeatable positions across all 4 renders
+            const theta = Math.acos((((i * 0.73) % 1) * 2) - 1);
+            const phi = ((i * 1.618) % 1) * Math.PI * 2;
 
             group.position.set(
                 radius * Math.sin(theta) * Math.cos(phi),
@@ -917,13 +1502,13 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
 
     const cloudMeshCache = useMemo(() => {
         const meshes: THREE.Mesh[] = [];
-        cloudsFBX.traverse((child) => {
+        cloudsClone.traverse((child) => {
             if ((child as THREE.Mesh).isMesh) {
                 meshes.push(child as THREE.Mesh);
             }
         });
         return meshes;
-    }, [cloudsFBX]);
+    }, [cloudsClone]);
 
     const cometMeshCache = useMemo(() => {
         return cometInstances;
@@ -931,9 +1516,9 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
 
     // Removed useEffect for Forest Geometry
 
-    // Maps removed for performance optimization
-    const desertMaps = null;
-    const oceanMaps = null;
+    // Maps for Desert and Ocean (Only for artifacts to keep quiz planet clean)
+    const desertMaps = isStatic ? desertTex : null;
+    const oceanMaps = isStatic ? oceanTex : null;
 
     // Apply uniforms updates
     useEffect(() => {
@@ -992,7 +1577,7 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
                 ${noisePars}
 
                 // Helper to get Growth Alpha based on specific point
-                float getGrowthAlpha(vec3 pos, vec3 seedPoint, float intensity) {
+                float getGrowthAlpha_planet(vec3 pos, vec3 seedPoint, float intensity) {
                     vec3 posNorm = normalize(pos);
                     if (intensity <= 0.0) return 0.0;
                     if (intensity >= 1.0) return 1.0;
@@ -1000,7 +1585,7 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
                     float align = dot(posNorm, normalize(seedPoint));
                     float grad = align * 0.5 + 0.5; 
                     
-                    float n = snoise(posNorm * 3.5) * 0.5 + 0.5;
+                    float n = snoise_planet(posNorm * 3.5) * 0.5 + 0.5;
                     float growthMap = mix(grad, n, 0.15); 
                     
                     float threshold = 1.05 - (intensity * 1.10);
@@ -1022,10 +1607,10 @@ vOriginalPos = position;
     
     vec3 p1 = vec3(0.0, 1.0, 0.0); // Q1 Top (Volcano / Ocean)
     vec3 p2 = vec3(0.8, -0.5, 0.3); // Q2 Unified Reveal (Right)
-    float aV = getGrowthAlpha(transformed, p1, intenVolcano);
-    float aO = getGrowthAlpha(transformed, p1, intenOcean);
-    float aD = getGrowthAlpha(transformed, p2, intenDesert);
-    float aF = getGrowthAlpha(transformed, p2, intenForest);
+    float aV = getGrowthAlpha_planet(transformed, p1, intenVolcano);
+    float aO = getGrowthAlpha_planet(transformed, p1, intenOcean);
+    float aD = getGrowthAlpha_planet(transformed, p2, intenDesert);
+    float aF = getGrowthAlpha_planet(transformed, p2, intenForest);
 
     // --- REPLACEMENT LOGIC ---
     // S2 (Desert/Forest) overrides S1 (Volcano/Ocean)
@@ -1072,197 +1657,18 @@ for (int i = 0; i < 8; i++) {
 
             shader.vertexShader = shader.vertexShader.replace('#include <morphtarget_vertex>', finalLogic);
 
-            shader.fragmentShader = `
-                uniform float uSliders[5];
-                uniform float uTime;
-                uniform sampler2D uDesertMap;
-                uniform sampler2D uOceanMap;
-                uniform vec3 uDesertColor;
-                uniform vec3 uOceanColor;
-                uniform bool uHasDesertMap;
-                uniform bool uHasOceanMap;
-                varying vec3 vWorldPos;
-                varying vec3 vOriginalPos;
-                varying vec2 vCustomUv;
-                ${noisePars}
-                
-                float getGrowthAlpha(vec3 pos, vec3 seedPoint, float intensity) {
-                    vec3 posNorm = normalize(pos);
-                    if (intensity <= 0.0) return 0.0;
-                    if (intensity >= 1.0) return 1.0;
-                    float align = dot(posNorm, normalize(seedPoint));
-
-                    // LINEAR GRADIENT
-                    float grad = align * 0.5 + 0.5; 
-                    
-                    float n = snoise(posNorm * 3.5) * 0.5 + 0.5;
-                    float growthMap = mix(grad, n, 0.15); 
-                    
-                    float threshold = 1.05 - (intensity * 1.10);
-                    return smoothstep(threshold, threshold + 0.15, growthMap);
-                }
-` + shader.fragmentShader;
-
             const normalLogic = `
 #include <normal_fragment_begin>
 // Recalculate normal for Base Mesh too, to catch the morphed topology properly
 normal = normalize(cross(dFdx(vWorldPos), dFdy(vWorldPos)));
 nonPerturbedNormal = normal;
 `;
+            shader.fragmentShader = sharedPlanetFragPars + shader.fragmentShader;
             shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_begin>', normalLogic);
+            shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', sharedPlanetFragLogic);
 
-            const colorMixLogic = `
-                vec3 mixedDiffuse = diffuseColor.rgb;
-
-
-                float s1 = uSliders[0];
-                float s2 = uSliders[1];
-                float intenVolcano = (s1 < 0.5) ? (0.5 - s1) * 2.0 : 0.0;
-                float intenOcean = (s1 > 0.5) ? (s1 - 0.5) * 2.0 : 0.0;
-                float intenDesert = (s2 < 0.5) ? (0.5 - s2) * 2.0 : 0.0;
-                float intenForest = (s2 > 0.5) ? (s2 - 0.5) * 2.0 : 0.0;
-                
-                vec3 seedQ1 = vec3(0.0, 1.0, 0.0);
-                vec3 seedQ2 = vec3(0.8, -0.5, 0.3);
-                float alphaVolcan = getGrowthAlpha(vOriginalPos, seedQ1, intenVolcano);
-                float alphaOcean = getGrowthAlpha(vOriginalPos, seedQ1, intenOcean);
-                float alphaDesert = getGrowthAlpha(vOriginalPos, seedQ2, intenDesert);
-                float alphaForest = getGrowthAlpha(vOriginalPos, seedQ2, intenForest);
-
-                // --- Q1: VOLCANO ---
-if (alphaVolcan > 0.05) {
-                    float rockNoise = snoise(vOriginalPos * 10.0 + vec3(10.0)); 
-                    vec3 rockDark = vec3(0.03, 0.03, 0.03);
-                    vec3 rockBrown = vec3(0.08, 0.06, 0.04);
-                    vec3 finalRock = mix(rockDark, rockBrown, rockNoise * 0.5 + 0.5);
-
-                    float noiseFlow = snoise(vOriginalPos * 0.3 + vec3(0.0, uTime * 0.1, 0.0));
-                    float ridges = 1.0 - abs(noiseFlow); 
-                    float river = smoothstep(0.85, 0.98, ridges);
-
-                    vec3 magmaRed = vec3(0.8, 0.0, 0.0);
-                    vec3 magmaBright = vec3(1.5, 0.1, 0.0);
-                    float pulse = snoise(vOriginalPos * 3.0 + vec3(uTime * 2.0)) * 0.5 + 0.5;
-                    vec3 mixedMagma = mix(magmaRed, magmaBright, pulse);
-                    
-                    vec3 volcanoBase = mix(finalRock, mixedMagma, river);
-    mixedDiffuse = mix(mixedDiffuse, volcanoBase, alphaVolcan);
-}
-
-// --- Q1: OCEAN ---
-if (alphaOcean > 0.001) {
-                    vec3 oBase = uOceanColor;
-    if (uHasOceanMap) oBase *= texture2D(uOceanMap, vCustomUv).rgb;
-
-                    // MULTI-TONE COLOR MIXING
-                    vec3 oceanCyan = vec3(0.01, 0.42, 0.55);
-                    vec3 oceanTurquoise = vec3(0.02, 0.65, 0.58);
-                    float colorMixNoise = snoise(vOriginalPos * 0.8 + 12.3) * 0.5 + 0.5;
-                    float colorMixNoise2 = snoise(vOriginalPos * 0.4 - 5.0 + uTime * 0.02) * 0.5 + 0.5;
-    oBase = mix(oBase, oceanCyan, colorMixNoise * 0.6);
-    oBase = mix(oBase, oceanTurquoise, colorMixNoise2 * 0.3);
-
-                    // --- WATER WAVE PATTERN (Refined: Magma style) ---
-                    float waveNoise = snoise(vOriginalPos * 0.25 + vec3(0.0, uTime * 0.12, 0.0));
-                    float waveRidges = 1.0 - abs(waveNoise);
-                    float waveLines = smoothstep(0.88, 0.99, waveRidges);
-                    
-                    vec3 foamColor = vec3(0.95, 1.0, 1.0);
-    oBase = mix(oBase, foamColor, waveLines * 0.6);
-
-    mixedDiffuse = mix(mixedDiffuse, oBase, alphaOcean);
-}
-
-// --- Q2: DESERT ---
-if (alphaDesert > 0.001) {
-                    vec3 dBase = uDesertColor;
-    if (uHasDesertMap) dBase *= texture2D(uDesertMap, vCustomUv).rgb;
-                    
-                    float sandGrains = snoise(vOriginalPos * 250.0) * 0.04;
-                    float ripples = snoise(vOriginalPos * 15.0) * 0.03;
-    dBase += sandGrains + ripples;
-    mixedDiffuse = mix(mixedDiffuse, dBase, alphaDesert);
-}
-
-// --- Q2: FOREST ---
-if (alphaForest > 0.001) {
-    // Shared palette with leaves
-    vec3 deepForest  = vec3(0.01, 0.12, 0.08);   // Dark shadows
-    vec3 healthyLeaf = vec3(0.05, 0.35, 0.12);   // Mid green
-    vec3 pineBlue    = vec3(0.05, 0.25, 0.30);   // Bluish green
-    vec3 dirtColor   = vec3(0.12, 0.08, 0.05);   // Dark brown for ground gaps
-    
-    // Pattern logic
-    float groundN = snoise(vOriginalPos * 12.0) * 0.5 + 0.5; // Reduced from 25.0
-    float patches = snoise(vOriginalPos * 4.0) * 0.5 + 0.5;  // Reduced from 6.0
-    float mossN = snoise(vOriginalPos * 25.0) * 0.5 + 0.5;   // Reduced from 80.0
-    
-    // Mix the ground colors
-    vec3 baseFloor = mix(deepForest, healthyLeaf, groundN);
-    baseFloor = mix(baseFloor, pineBlue, patches * 0.4);
-    
-    // Add "dirt" or shadowed gaps between mossy patches
-    float dirtMask = smoothstep(0.3, 0.1, groundN * patches);
-    baseFloor = mix(baseFloor, dirtColor, dirtMask * 0.6);
-    
-    // Micro-moss detail
-    baseFloor = mix(baseFloor, baseFloor * 1.2, mossN * 0.2);
-    
-    mixedDiffuse = mix(mixedDiffuse, baseFloor, alphaForest);
-}
-
-diffuseColor.rgb = mixedDiffuse;
-`;
-            shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', colorMixLogic);
-
-            const metalnessLogic = `
-#include <metalnessmap_fragment>
-                float s1_m = uSliders[0];
-                float s2_m = uSliders[1];
-                float intenVolcano_m = (s1_m < 0.5) ? (0.5 - s1_m) * 2.0 : 0.0;
-                float intenOcean_m = (s1_m > 0.5) ? (s1_m - 0.5) * 2.0 : 0.0;
-                float intenDesert_m = (s2_m < 0.5) ? (0.5 - s2_m) * 2.0 : 0.0;
-                float intenForest_m = (s2_m > 0.5) ? (s2_m - 0.5) * 2.0 : 0.0;
-                vec3 seedQ1_m = vec3(0.0, 1.0, 0.0);
-                vec3 seedQ2_m = vec3(0.8, -0.5, 0.3);
-                float alphaVolcan_m = getGrowthAlpha(vOriginalPos, seedQ1_m, intenVolcano_m);
-                float alphaOcean_m = getGrowthAlpha(vOriginalPos, seedQ1_m, intenOcean_m);
-                float alphaDesert_m = getGrowthAlpha(vOriginalPos, seedQ2_m, intenDesert_m);
-                float alphaForest_m = getGrowthAlpha(vOriginalPos, seedQ2_m, intenForest_m);
-
-if (alphaVolcan_m > 0.01) metalnessFactor = mix(metalnessFactor, 0.0, alphaVolcan_m);
-if (alphaOcean_m > 0.01) metalnessFactor = mix(metalnessFactor, 0.1, alphaOcean_m);
-if (alphaDesert_m > 0.01) metalnessFactor = mix(metalnessFactor, 0.0, alphaDesert_m);
-if (alphaForest_m > 0.01) metalnessFactor = mix(metalnessFactor, 0.0, alphaForest_m);
-`;
-            shader.fragmentShader = shader.fragmentShader.replace('#include <metalnessmap_fragment>', metalnessLogic);
-
-            const roughnessLogic = `
-#include <roughnessmap_fragment>
-                float s1_r = uSliders[0];
-                float s2_r = uSliders[1];
-                float intenVolcano_r = (s1_r < 0.5) ? (0.5 - s1_r) * 2.0 : 0.0;
-                float intenOcean_r = (s1_r > 0.5) ? (s1_r - 0.5) * 2.0 : 0.0;
-                float intenDesert_r = (s2_r < 0.5) ? (0.5 - s2_r) * 2.0 : 0.0;
-                float intenForest_r = (s2_r > 0.5) ? (s2_r - 0.5) * 2.0 : 0.0;
-                vec3 seedQ1_r = vec3(0.0, 1.0, 0.0);
-                vec3 seedQ2_r = vec3(0.8, -0.5, 0.3);
-                float alphaVolcan_r = getGrowthAlpha(vOriginalPos, seedQ1_r, intenVolcano_r);
-                float alphaOcean_r = getGrowthAlpha(vOriginalPos, seedQ1_r, intenOcean_r);
-                float alphaDesert_r = getGrowthAlpha(vOriginalPos, seedQ2_r, intenDesert_r);
-                float alphaForest_r = getGrowthAlpha(vOriginalPos, seedQ2_r, intenForest_r);
-
-if (alphaVolcan_r > 0.01) roughnessFactor = mix(roughnessFactor, 1.0, alphaVolcan_r);
-if (alphaOcean_r > 0.01) {
-                    // Streaky reflections via noise-distorted roughness
-                    float rNoise = snoise(vOriginalPos * 4.0 + vec3(uTime * 0.05, 0.0, 0.0)) * 0.5 + 0.5;
-                    float finalR = mix(0.01, 0.12, rNoise);
-    roughnessFactor = mix(roughnessFactor, finalR, alphaOcean_r);
-}
-if (alphaDesert_r > 0.01) roughnessFactor = mix(roughnessFactor, 1.0, alphaDesert_r);
-if (alphaForest_r > 0.01) roughnessFactor = mix(roughnessFactor, 0.8, alphaForest_r);
-`;
-            shader.fragmentShader = shader.fragmentShader.replace('#include <roughnessmap_fragment>', roughnessLogic);
+            shader.fragmentShader = shader.fragmentShader.replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>\n${metalnessLogicChunk}`);
+            shader.fragmentShader = shader.fragmentShader.replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\n${roughnessLogicChunk}`);
 
             // @ts-ignore
             mat.userData.shader = shader;
@@ -1303,13 +1709,13 @@ if (alphaForest_r > 0.01) roughnessFactor = mix(roughnessFactor, 0.8, alphaFores
                 varying vec3 vWorldPos;
                 ${noisePars}
                 
-                float getGrowthAlpha(vec3 pos, vec3 seedPoint, float intensity) {
+                float getGrowthAlpha_planet(vec3 pos, vec3 seedPoint, float intensity) {
                     vec3 posNorm = normalize(pos);
                     if (intensity <= 0.0) return 0.0;
                     if (intensity >= 1.0) return 1.0;
                     float align = dot(posNorm, normalize(seedPoint));
                     float grad = align * 0.5 + 0.5; 
-                    float n = snoise(posNorm * 3.5) * 0.5 + 0.5;
+                    float n = snoise_planet(posNorm * 3.5) * 0.5 + 0.5;
                     float growthMap = mix(grad, n, 0.15); 
                     float threshold = 1.05 - (intensity * 1.10);
                     return smoothstep(threshold, threshold + 0.15, growthMap);
@@ -1323,7 +1729,7 @@ if (alphaForest_r > 0.01) roughnessFactor = mix(roughnessFactor, 0.8, alphaFores
 vOriginalPos = position;
 vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
                 float intenForest_v = (uSliders[1] > 0.5) ? (uSliders[1] - 0.5) * 2.0 : 0.0;
-                float maskF_v = getGrowthAlpha(transformed, vec3(0.8, -0.5, 0.3), intenForest_v);
+                float maskF_v = getGrowthAlpha_planet(transformed, vec3(0.8, -0.5, 0.3), intenForest_v);
                 transformed *= mix(0.0001, 1.0, maskF_v);
 `
             );
@@ -1335,13 +1741,13 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
                 varying vec3 vWorldPos;
                 ${noisePars}
                 
-                float getGrowthAlpha(vec3 pos, vec3 seedPoint, float intensity) {
+                float getGrowthAlpha_planet(vec3 pos, vec3 seedPoint, float intensity) {
                     vec3 posNorm = normalize(pos);
                     if (intensity <= 0.0) return 0.0;
                     if (intensity >= 1.0) return 1.0;
                     float align = dot(posNorm, normalize(seedPoint));
                     float grad = align * 0.5 + 0.5; 
-                    float n = snoise(posNorm * 3.5) * 0.5 + 0.5;
+                    float n = snoise_planet(posNorm * 3.5) * 0.5 + 0.5;
                     float growthMap = mix(grad, n, 0.15); 
                     float threshold = 1.05 - (intensity * 1.10);
                     return smoothstep(threshold, threshold + 0.15, growthMap);
@@ -1350,7 +1756,7 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
 
             const leafRoughnessLogic = `
                 #include <roughnessmap_fragment>
-                float leafRoughN = snoise(vOriginalPos * 60.0) * 0.5 + 0.5;
+                float leafRoughN = snoise_planet(vOriginalPos * 60.0) * 0.5 + 0.5;
                 roughnessFactor = mix(0.75, 1.0, leafRoughN);
             `;
             shader.fragmentShader = shader.fragmentShader.replace('#include <roughnessmap_fragment>', leafRoughnessLogic);
@@ -1359,23 +1765,23 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
                 float s2_f = uSliders[1];
                 float intenForest_f = (s2_f > 0.5) ? (s2_f - 0.5) * 2.0 : 0.0;
                 vec3 seedQ2_f = vec3(0.8, -0.5, 0.3); 
-                float maskF = getGrowthAlpha(vOriginalPos, seedQ2_f, intenForest_f);
+                float maskF = getGrowthAlpha_planet(vOriginalPos, seedQ2_f, intenForest_f);
 
                 if (maskF < 0.001) discard; 
 
                 // --- Stylized Leaf Color System (Enhanced) ---
                 
                 // 1. Per-Tree/Cluster Variation (Mid Frequency)
-                float treeNoise = snoise(vOriginalPos * 12.0) * 0.5 + 0.5; // Reduced from 18.0
+                float treeNoise = snoise_planet(vOriginalPos * 12.0) * 0.5 + 0.5; // Reduced from 18.0
                 
                 // 2. Large Scale "Clumping" (Low Frequency)
-                float clumpNoise = snoise(vOriginalPos * 3.0) * 0.5 + 0.5; // Reduced from 4.0
+                float clumpNoise = snoise_planet(vOriginalPos * 3.0) * 0.5 + 0.5; // Reduced from 4.0
                 
                 // 3. Micro-detail / Texture (High Frequency)
-                float leafDetail = snoise(vOriginalPos * 25.0) * 0.5 + 0.5; // Reduced from 120.0 (Huge reduction for blur effect)
+                float leafDetail = snoise_planet(vOriginalPos * 25.0) * 0.5 + 0.5; // Reduced from 120.0 (Huge reduction for blur effect)
                 
                 // 4. Subtle Time-based "Shifting"
-                float breeze = snoise(vOriginalPos * 10.0 + vec3(uTime * 0.05)) * 0.1;
+                float breeze = snoise_planet(vOriginalPos * 10.0 + vec3(uTime * 0.05)) * 0.1;
 
                 // Color Palette
                 vec3 deepGreen   = vec3(0.01, 0.12, 0.08);   // Very dark forest shadow
@@ -1414,7 +1820,7 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
                 finalLeafColor = mix(finalLeafColor, rimColor, fresnel * 0.5 * maskF);
                 
                 // Subtle global variation across the sphere
-                float globalVar = snoise(vOriginalPos * 0.5) * 0.1;
+                float globalVar = snoise_planet(vOriginalPos * 0.5) * 0.1;
                 finalLeafColor += globalVar;
 
                 diffuseColor.rgb = finalLeafColor;
@@ -1447,25 +1853,51 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
     useFrame((state) => {
         const time = state.clock.getElapsedTime();
 
-        // Update Base Uniforms
-        if (materialRef.current && materialRef.current?.userData?.shader) {
-            const sh = materialRef.current.userData.shader;
+        // Determine current colors for Desert and Ocean based on Q1 and Q2 from values
+        // Q1 (Volcano/Ocean): low: #FF4444, high: #3B82F6
+        // Q2 (Desert/Forest): low: #B45309, high: #16A34A
+        const desertColor = new THREE.Color('#B45309');
+        const oceanColor = new THREE.Color('#3B82F6');
+
+        // Update Base Uniforms (Main or Artifact base)
+        let activeBaseMat = materialRef.current;
+        if (materialOverride === 'lamp') activeBaseMat = ringMaterials.baseLamp as THREE.MeshPhysicalMaterial;
+        else if (materialOverride === 'silver') activeBaseMat = ringMaterials.baseSilver as THREE.MeshStandardMaterial;
+        else if (materialOverride === 'darkWood') activeBaseMat = ringMaterials.baseDarkWood as THREE.MeshStandardMaterial;
+
+        if (activeBaseMat && activeBaseMat?.userData?.shader) {
+            const sh = activeBaseMat.userData.shader;
+            if (sh.uniforms.uSliders) sh.uniforms.uSliders.value = values.map(v => v / 100);
+            if (sh.uniforms.uIndices) sh.uniforms.uIndices.value = customUniforms.current.uIndices.value;
+            if (sh.uniforms.uTime) sh.uniforms.uTime.value = time;
+            if (sh.uniforms.uDesertColor) sh.uniforms.uDesertColor.value = desertColor;
+            if (sh.uniforms.uOceanColor) sh.uniforms.uOceanColor.value = oceanColor;
+        }
+
+        // Update active forest material (standard or override)
+        let activeForestMat = forestMaterialRef.current;
+        if (materialOverride === 'lamp') activeForestMat = ringMaterials.forestLamp as THREE.MeshStandardMaterial;
+        else if (materialOverride === 'silver') activeForestMat = ringMaterials.forestSilver as THREE.MeshStandardMaterial;
+        else if (materialOverride === 'darkWood') activeForestMat = ringMaterials.forestDarkWood as THREE.MeshStandardMaterial;
+
+        if (activeForestMat && activeForestMat?.userData?.shader) {
+            const sh = activeForestMat.userData.shader;
             if (sh.uniforms.uSliders) sh.uniforms.uSliders.value = values.map(v => v / 100);
             if (sh.uniforms.uTime) sh.uniforms.uTime.value = time;
         }
-        if (forestMaterialRef.current && forestMaterialRef.current?.userData?.shader) {
-            const sh = forestMaterialRef.current.userData.shader;
-            if (sh.uniforms.uSliders) sh.uniforms.uSliders.value = values.map(v => v / 100);
-            if (sh.uniforms.uTime) sh.uniforms.uTime.value = time;
-        }
+
+
 
         const s1_frame = values[0] / 100;
         const s2_frame = values[1] / 100;
 
-        const activeVolcan = (s1_frame < 0.5) ? 1.0 : 0.0;
-        const activeOcean = (s1_frame > 0.5) ? 1.0 : 0.0;
-        const activeDesert = (s2_frame < 0.5) ? 1.0 : 0.0;
-        const activeForest = (s2_frame > 0.5) ? 1.0 : 0.0;
+        const activeVolcan = (s1_frame < 0.5) ? (0.5 - s1_frame) * 2.0 : 0.0;
+        const activeOcean = (s1_frame > 0.5) ? (s1_frame - 0.5) * 2.0 : 0.0;
+        const activeDesert = (s2_frame < 0.5) ? (0.5 - s2_frame) * 2.0 : 0.0;
+        const activeForest = (s2_frame > 0.5) ? (s2_frame - 0.5) * 2.0 : 0.0;
+
+        // Boost for physical renders to match quiz appearance (1.8x)
+        const mult = materialOverride ? 1.8 : 1.0;
 
         // Unified Mesh control using cached references
         baseMeshCache.forEach((child) => {
@@ -1476,22 +1908,23 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
                 const k = key.toLowerCase();
                 const idx = dict[key];
                 if (k.includes('ocean')) {
-                    child.morphTargetInfluences[idx] = activeOcean;
+                    child.morphTargetInfluences[idx] = activeOcean * mult;
                     if (idx < 8) indices[idx] = 1;
                 } else if (k.includes('desert')) {
-                    child.morphTargetInfluences[idx] = activeDesert;
+                    child.morphTargetInfluences[idx] = activeDesert * mult;
                     if (idx < 8) indices[idx] = 0;
                 } else if (k.includes('volcan')) {
-                    child.morphTargetInfluences[idx] = activeVolcan;
+                    child.morphTargetInfluences[idx] = activeVolcan * mult;
                     if (idx < 8) indices[idx] = 2;
                 } else if (k.includes('forest')) {
-                    child.morphTargetInfluences[idx] = activeForest;
+                    child.morphTargetInfluences[idx] = activeForest * mult;
                     if (idx < 8) indices[idx] = 3;
                 }
             }
 
-            // Update Indices for the shader
-            const sh = materialRef.current?.userData?.shader;
+            // Update Indices for the shader and customUniforms
+            customUniforms.current.uIndices.value = indices;
+            const sh = activeBaseMat?.userData?.shader;
             if (sh && sh.uniforms.uIndices) {
                 sh.uniforms.uIndices.value = indices;
             }
@@ -1503,8 +1936,8 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
             // Determine ring morph values based on currentSection and slider (Question 3 logic)
             // Questions: 0: empathy, 1: sociable, 2: persistent (Q3), 3: curious, 4: relaxed
 
-            // Visibility logic: hide until Q3 or later
-            const ringsVisible = currentSection >= 2;
+            // Visibility logic: show if materialOverride exists OR if currentSection >= 2 OR isStatic
+            const ringsVisible = (materialOverride || isStatic) ? true : currentSection >= 2;
 
             // Initial Q3 state (slider 50): ring_0 = 0.5, others = 0
             let r0_val = 0.5;
@@ -1525,9 +1958,9 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
 
                 // Ring 3: 85% to 100% (0 -> 1)
                 if (s > 85) r3_val = Math.min(1.0, (s - 85) / (100 - 85));
-            } else if (currentSection > 2) {
-                // If past Q3, use the final answer for Q3 to keep them static but visible
-                const fs = values[2] || 0;
+            } else if (currentSection > 2 || materialOverride || isStatic) {
+                // If past Q3 (or in artifact view), use the final answer for Q3 (or default 50) to keep them static but visible
+                const fs = values[2] || 50;
                 r0_val = fs / 100;
                 r1_val = fs > 50 ? Math.min(1.0, (fs - 50) / (65 - 50)) : 0;
                 r2_val = fs > 65 ? Math.min(1.0, (fs - 65) / (85 - 65)) : 0;
@@ -1540,32 +1973,38 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
 
                 const lowerName = mesh.name.toLowerCase();
 
-                // 1. Update Time Uniform
+                // 1. Update Material and Uniforms
+                let overrideMat: THREE.Material | undefined = undefined;
+                if (materialOverride === 'lamp') overrideMat = ringMaterials.ringLamp;
+                else if (materialOverride === 'silver') overrideMat = ringMaterials.ringSilver;
+                else if (materialOverride === 'darkWood') overrideMat = ringMaterials.ringDarkWood;
+
+                if (overrideMat) {
+                    mesh.material = overrideMat;
+                } else if (lowerName === 'ring' || lowerName === 'ring_0') {
+                    mesh.material = ringMaterials.planetary;
+                } else if (lowerName === 'ring_1') {
+                    mesh.material = ringMaterials.magma;
+                } else if (lowerName === 'ring_2') {
+                    mesh.material = ringMaterials.moon;
+                } else if (lowerName === 'ring_3') {
+                    mesh.material = ringMaterials.martian;
+                }
+
                 if (mesh.material && (mesh.material as any).uniforms && (mesh.material as any).uniforms.uTime) {
                     (mesh.material as any).uniforms.uTime.value = state.clock.elapsedTime;
                 }
 
-                // 2. Assign specific materials and handle scales 
-                let activeMorph = 0;
-                if (lowerName === 'ring' || lowerName === 'ring_0') {
-                    mesh.material = ringMaterials.planetary;
-                    mesh.scale.set(100, 100, 100);
-                    activeMorph = r0_val;
-                } else if (lowerName === 'ring_1') {
-                    mesh.material = ringMaterials.magma;
-                    mesh.scale.set(100, 100, 100);
-                    activeMorph = r1_val;
-                } else if (lowerName === 'ring_2') {
-                    mesh.material = ringMaterials.moon;
-                    mesh.scale.set(100, 100, 100);
-                    activeMorph = r2_val;
-                } else if (lowerName === 'ring_3') {
-                    mesh.material = ringMaterials.martian;
-                    mesh.scale.set(100, 100, 100);
-                    activeMorph = r3_val;
-                }
+                // 2. Set scale
+                mesh.scale.set(100, 100, 100);
 
                 // 3. Dynamic Morph Target Enforcement (high state)
+                let activeMorph = 0;
+                if (lowerName === 'ring' || lowerName === 'ring_0') activeMorph = r0_val;
+                else if (lowerName === 'ring_1') activeMorph = r1_val;
+                else if (lowerName === 'ring_2') activeMorph = r2_val;
+                else if (lowerName === 'ring_3') activeMorph = r3_val;
+
                 if (mesh.morphTargetInfluences) {
                     for (let i = 0; i < mesh.morphTargetInfluences.length; i++) {
                         mesh.morphTargetInfluences[i] = activeMorph;
@@ -1586,15 +2025,44 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
             [0.75, 0.95],
             [0.85, 1.00]
         ];
-        // Shuffle intervals to randomize which cloud disappears when
-        const shuffled = [...intervals].sort(() => Math.random() - 0.5);
+        // Ensure intervals are sorted by start (already are, but being explicit)
+        const sortedIntervals = [...intervals].sort((a, b) => a[0] - b[0]);
 
         const mapping: Record<string, number[]> = {};
-        for (let i = 1; i <= 8; i++) {
-            mapping[`Cloud_${i}`] = shuffled[i - 1];
+        // Match Cloud_1 to Cloud_8 (or more if exists) to sorted intervals
+        for (let i = 1; i <= 20; i++) {
+            mapping[`Cloud_${i}`] = sortedIntervals[(i - 1) % sortedIntervals.length];
         }
         return mapping;
     }, []);
+
+    useEffect(() => {
+        if (materialOverride && planetAssemblyRef.current) {
+            const overrideMat = ringMaterials[materialOverride];
+
+            // Specialized forest materials for artifacts
+            let forestOverrideMat = overrideMat;
+            if (materialOverride === 'lamp') forestOverrideMat = ringMaterials.forestLamp;
+            else if (materialOverride === 'silver') forestOverrideMat = ringMaterials.forestSilver;
+            else if (materialOverride === 'darkWood') forestOverrideMat = ringMaterials.forestDarkWood;
+
+            planetAssemblyRef.current.traverse((child) => {
+                if ((child as THREE.Mesh).isMesh) {
+                    const m = child as THREE.Mesh;
+                    if (m.name.toLowerCase().includes('forest')) {
+                        m.material = forestOverrideMat;
+                    } else {
+                        m.material = overrideMat;
+                    }
+                }
+            });
+        }
+    }, [materialOverride, ringMaterials, baseMesh, forestMesh, ringGroup, cometInstances, cloudsFBX]);
+
+    const artifactTransform = useMemo(() => {
+        const key = materialOverride || 'default';
+        return ARTIFACT_TRANSFORMS[key] || ARTIFACT_TRANSFORMS.default;
+    }, [materialOverride]);
 
     useFrame((state) => {
         const time = state.clock.elapsedTime;
@@ -1606,42 +2074,45 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
             let cometCount = 0;
             let cometMat = ringMaterials.Comet_optimized_1;
             let targetMeshTag = "optimized_1";
-            let cometScale = 75;
+            let cometScale = 110;
 
             if (curiousValue >= 50.1) { // High Curiosity: Blue Comets
                 cometMat = ringMaterials.Comet_optimized_1;
                 targetMeshTag = "optimized_1";
-                cometScale = 75;
+                cometScale = 85; // Increased from 75
                 // Scale from 2 (at 51%) up to 6 (at 100%)
-                cometCount = 2 + Math.floor(((curiousValue - 50.1) / 49.9) * 4.99);
+                cometCount = 2 + Math.floor(((curiousValue - 50.1) / 49.9) * 2.99);
             } else if (curiousValue <= 49.9) { // Low Curiosity: Magma Comets
                 cometMat = ringMaterials.Comet_optimized_2;
                 targetMeshTag = "optimized_2";
-                cometScale = 110;
+                cometScale = 110; // Increased from 110
                 // 49.9% -> 1, 0% -> 3
-                cometCount = Math.max(1, 1 + Math.floor(((49.9 - curiousValue) / 50.0) * 2.99));
+                cometCount = Math.max(1, 1 + Math.floor(((39.9 - curiousValue) / 50.0) * 2.99));
             } else {
                 cometCount = 0; // Exactly 0 at 50% threshold
             }
 
             cometMeshCache.forEach((group, idx) => {
-                const isGroupVisible = currentSection > 3 || (currentSection === 3 && idx < cometCount);
-                group.visible = isGroupVisible;
+                // Final condition for artifacts: match exact Q5 comet count
+                // If it's an artifact render (isStatic), we base it on the curiosity slider from values[3]
+                // but we also ensure it's visible in the summary screen (currentSection === 4 or 5)
+                const isGroupVisible = (currentSection === 4 || currentSection >= 3 || !!isStatic) && idx < (cometCount ?? 0);
+                group.visible = !!isGroupVisible;
 
                 if (isGroupVisible) {
                     // Specific positioning for Magma Comets:
                     if (targetMeshTag === "optimized_2") {
                         // EDIT THESE ARRAYS TO CHANGE INDIVIDUAL MAGMA COMET POSITIONS
-                        const magmaRadii = [200, 800, 180];
+                        const magmaRadii = [195, 205, 215];
                         const magmaElevations = [
-                            Math.PI / 5.8,   // Comet 1: 64 deg
-                            Math.PI / 2.001, // Comet 2: 89.9 deg (Absolute Top)
-                            Math.PI / 2.0    // Comet 3: 45 deg
+                            Math.PI / 0.8,   // Comet 1: 64 deg
+                            Math.PI / 382.5, // Comet 2: 89.9 deg (Absolute Top)
+                            Math.PI / 3.0    // Comet 3: 45 deg
                         ];
                         const magmaAngles = [
-                            (10 * Math.PI / -360),   // Comet 1 (your latest edit)
-                            (50 * Math.PI / 140), // Comet 2
-                            (200 * Math.PI / 1) + Math.PI // Comet 3 (auto-spaced)
+                            (1 * Math.PI / 360),   // Comet 1 (your latest edit)
+                            (50 * Math.PI / -100), // Comet 2
+                            (200 * Math.PI / 10) + Math.PI // Comet 3 (auto-spaced)
                         ];
 
                         const radius = magmaRadii[idx % 3];
@@ -1669,7 +2140,13 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
                             mesh.visible = isTargetMesh;
 
                             if (isTargetMesh) {
-                                mesh.material = cometMat;
+                                // Apply material override or default
+                                let activeCometMat: THREE.Material = cometMat;
+                                if (materialOverride === 'lamp') activeCometMat = ringMaterials.cometLamp as THREE.MeshPhysicalMaterial;
+                                else if (materialOverride === 'silver') activeCometMat = ringMaterials.cometSilver as THREE.MeshStandardMaterial;
+                                else if (materialOverride === 'darkWood') activeCometMat = ringMaterials.cometDarkWood as THREE.MeshStandardMaterial;
+
+                                mesh.material = activeCometMat;
                                 mesh.scale.set(cometScale, cometScale, cometScale);
 
                                 if (mesh.material && (mesh.material as any).uniforms?.uTime) {
@@ -1691,17 +2168,24 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
         }
 
         // --- Cloud logic ---
-        if (cloudsRef.current) {
-            const cloudsVisible = currentSection === 4;
+        if (cloudsClone) {
+            // Clouds visibility and amount should match final Q5 precisely
+            // Artifacts (isStatic) should always show the clouds based on their slider
+            const cloudsVisible = currentSection === 4 || !!isStatic;
             const p = (values[4] || 0) / 100;
             const stormIntensity = Math.max(0.0, 1.0 - (p / 0.49));
 
-            cloudsRef.current.traverse((child) => {
+            cloudsClone.traverse((child) => {
                 if ((child as any).isMesh) {
                     const mesh = child as THREE.Mesh;
-                    mesh.visible = cloudsVisible;
                     mesh.scale.set(100, 100, 100);
-                    mesh.material = ringMaterials.cloud;
+                    mesh.renderOrder = 10; // Ensure clouds are above planet surface in transparent renders
+
+                    // Apply specialized material mapping for artifact visibility
+                    if (materialOverride === 'lamp') mesh.material = ringMaterials.cloudLamp as THREE.ShaderMaterial;
+                    else if (materialOverride === 'silver') mesh.material = ringMaterials.cloudSilver as THREE.ShaderMaterial;
+                    else if (materialOverride === 'darkWood') mesh.material = ringMaterials.cloudDarkWood as THREE.ShaderMaterial;
+                    else mesh.material = ringMaterials.cloud as THREE.ShaderMaterial;
 
                     if (mesh.material instanceof THREE.ShaderMaterial) {
                         mesh.material.uniforms.uTime.value = time;
@@ -1716,20 +2200,21 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
                         targetVal = 1.0 - Math.min(1.0, Math.max(0.0, (p - start) / (end - start)));
                     }
 
-                    if (mesh.morphTargetInfluences && mesh.morphTargetDictionary) {
-                        const idx = mesh.morphTargetDictionary['high'];
-                        if (idx !== undefined) {
-                            mesh.morphTargetInfluences[idx] = targetVal;
+                    // Cloud visibility based on section AND its individual growth
+                    mesh.visible = cloudsVisible && targetVal > 0.001;
+
+                    // Cloud Morphs: proportional to visibility/growth
+                    if (mesh.morphTargetInfluences) {
+                        for (let i = 0; i < mesh.morphTargetInfluences.length; i++) {
+                            mesh.morphTargetInfluences[i] = targetVal;
                         }
                     }
-
-                    if (targetVal <= 0.001) mesh.visible = false;
                 }
             });
         }
 
         // --- Rotation logic ---
-        if (planetAssemblyRef.current) {
+        if (planetAssemblyRef.current && !isStatic) {
             planetAssemblyRef.current.rotation.y += 0.002;
         }
     });
@@ -1749,38 +2234,67 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
 
             <ambientLight intensity={0.15} />
 
-            <group ref={planetAssemblyRef}>
-                <primitive object={baseMesh} material={materialRef.current} scale={0.004} name="planet_base" />
+            <group
+                ref={planetAssemblyRef}
+                position={artifactTransform.position}
+                rotation={artifactTransform.rotation}
+                scale={artifactTransform.scale}
+            >
+                <primitive
+                    object={baseMesh}
+                    material={materialOverride === 'lamp' ? ringMaterials.baseLamp : (materialOverride === 'silver' ? ringMaterials.baseSilver : (materialOverride === 'darkWood' ? ringMaterials.baseDarkWood : materialRef.current))}
+                    scale={0.004}
+                    name="planet_base_mesh"
+                />
                 <primitive
                     object={forestMesh}
-                    material={forestMaterialRef.current}
+                    material={materialOverride === 'lamp' ? ringMaterials.forestLamp : (materialOverride === 'silver' ? ringMaterials.forestSilver : (materialOverride === 'darkWood' ? ringMaterials.forestDarkWood : forestMaterialRef.current))}
                     scale={0.395}
                     position={[0, 0, 0]}
                     rotation={[-1.5, 0, 0.05]}
-                    name="planet_forest"
+                    name="planet_forest_mesh"
                 />
                 {/* Butterflies appear when Forest slider > 50% */}
                 {/* Q3 Rings */}
-                <primitive object={ringGroup} ref={ringRef} scale={[0.004, 0.004, 0.004]} position={[0, 0, 0]} name="ring_group" />
-
-                {/* Comets */}
-                <group ref={cometRef} scale={[0.004, 0.004, 0.004]} position={[0, 0, 0]} name="comet_group" />
-
-                {/* Clouds */}
-                <primitive object={cloudsFBX} ref={cloudsRef} scale={[0.004, 0.004, 0.004]} position={[0, 0, 0]} name="clouds_group" />
-
-                <ButterflyParticles
-                    intensity={(values[1] > 50) ? (values[1] - 50) / 50 : 0}
-                    radius={2.15}
-                    speed={1.0}
+                <primitive
+                    object={ringGroup}
+                    ref={ringRef}
+                    scale={[0.004, 0.004, 0.004]}
+                    position={[0, 0, 0]}
+                    name="ring_group"
                 />
 
-                {/* Wind appears when Forest slider < 50% - Removed per user request */}
-                {/* <WindParticles
-                    intensity={(values[1] < 50) ? (50 - values[1]) / 50 : 0}
-                    radius={4.5}
-                    speed={1.0}
-                /> */}
+                {/* Comets */}
+                <group
+                    ref={cometRef}
+                    scale={[0.004, 0.004, 0.004]}
+                    position={[0, 0, 0]}
+                    name="comet_group"
+                >
+                    {cometInstances.map((group, idx) => (
+                        <primitive
+                            key={idx}
+                            object={group}
+                        />
+                    ))}
+                </group>
+
+                {/* Clouds */}
+                <primitive
+                    object={cloudsClone}
+                    ref={cloudsRef}
+                    scale={[0.004, 0.004, 0.004]}
+                    position={[0, 0, 0]}
+                    name="clouds_group"
+                />
+
+                {!materialOverride && !isStatic && (
+                    <ButterflyParticles
+                        intensity={(values[1] > 50) ? (values[1] - 50) / 50 : 0}
+                        radius={2.15}
+                        speed={1.0}
+                    />
+                )}
             </group>
         </group>
     );
