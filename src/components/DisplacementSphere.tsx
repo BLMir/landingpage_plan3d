@@ -124,6 +124,50 @@ float getGrowthAlpha_planet(vec3 pos, vec3 seedPoint, float intensity) {
 }
 `;
 
+const metalnessLogicChunk = `
+    float s1_m = uSliders[0];
+    float s2_m = uSliders[1];
+    float intenVolcano_m = (s1_m < 0.5) ? (0.5 - s1_m) * 2.0 : 0.0;
+    float intenOcean_m = (s1_m > 0.5) ? (s1_m - 0.5) * 2.0 : 0.0;
+    float intenDesert_m = (s2_m < 0.5) ? (0.5 - s2_m) * 2.0 : 0.0;
+    float intenForest_m = (s2_m > 0.5) ? (s2_m - 0.5) * 2.0 : 0.0;
+    vec3 seedQ1_m = vec3(0.0, 1.0, 0.0);
+    vec3 seedQ2_m = vec3(0.8, -0.5, 0.3);
+    float alphaVolcan_m = getGrowthAlpha_planet(vOriginalPos, seedQ1_m, intenVolcano_m);
+    float alphaOcean_m = getGrowthAlpha_planet(vOriginalPos, seedQ1_m, intenOcean_m);
+    float alphaDesert_m = getGrowthAlpha_planet(vOriginalPos, seedQ2_m, intenDesert_m);
+    float alphaForest_m = getGrowthAlpha_planet(vOriginalPos, seedQ2_m, intenForest_m);
+
+    if (alphaVolcan_m > 0.01) metalnessFactor = mix(metalnessFactor, 0.0, alphaVolcan_m);
+    if (alphaOcean_m > 0.01) metalnessFactor = mix(metalnessFactor, 0.1, alphaOcean_m);
+    if (alphaDesert_m > 0.01) metalnessFactor = mix(metalnessFactor, 0.0, alphaDesert_m);
+    if (alphaForest_m > 0.01) metalnessFactor = mix(metalnessFactor, 0.0, alphaForest_m);
+`;
+
+const roughnessLogicChunk = `
+    float s1_r = uSliders[0];
+    float s2_r = uSliders[1];
+    float intenVolcano_r = (s1_r < 0.5) ? (0.5 - s1_r) * 2.0 : 0.0;
+    float intenOcean_r = (s1_r > 0.5) ? (s1_r - 0.5) * 2.0 : 0.0;
+    float intenDesert_r = (s2_r < 0.5) ? (0.5 - s2_r) * 2.0 : 0.0;
+    float intenForest_r = (s2_r > 0.5) ? (s2_r - 0.5) * 2.0 : 0.0;
+    vec3 seedQ1_r = vec3(0.0, 1.0, 0.0);
+    vec3 seedQ2_r = vec3(0.8, -0.5, 0.3);
+    float alphaVolcan_r = getGrowthAlpha_planet(vOriginalPos, seedQ1_r, intenVolcano_r);
+    float alphaOcean_r = getGrowthAlpha_planet(vOriginalPos, seedQ1_r, intenOcean_r);
+    float alphaDesert_r = getGrowthAlpha_planet(vOriginalPos, seedQ2_r, intenDesert_r);
+    float alphaForest_r = getGrowthAlpha_planet(vOriginalPos, seedQ2_r, intenForest_r);
+
+    if (alphaVolcan_r > 0.01) roughnessFactor = mix(roughnessFactor, 1.0, alphaVolcan_r);
+    if (alphaOcean_r > 0.01) {
+        float rNoise = snoise_planet(vOriginalPos * 4.0 + vec3(uTime * 0.05, 0.0, 0.0)) * 0.5 + 0.5;
+        float finalR = mix(0.01, 0.12, rNoise);
+        roughnessFactor = mix(roughnessFactor, finalR, alphaOcean_r);
+    }
+    if (alphaDesert_r > 0.01) roughnessFactor = mix(roughnessFactor, 1.0, alphaDesert_r);
+    if (alphaForest_r > 0.01) roughnessFactor = mix(roughnessFactor, 0.8, alphaForest_r);
+`;
+
 const sharedPlanetFragLogic = `
 vec3 mixedDiffuse = diffuseColor.rgb;
 float s1 = uSliders[0];
@@ -157,7 +201,10 @@ if (alphaVolcan > 0.05) {
 }
 if (alphaOcean > 0.001) {
     vec3 oBase = uOceanColor;
-    if (uHasOceanMap) oBase *= texture2D(uOceanMap, vCustomUv).rgb;
+    if (uHasOceanMap) {
+        vec3 oTex = texture2D(uOceanMap, vCustomUv).rgb;
+        oBase = mix(oBase, oBase * oTex, 0.85); 
+    }
     vec3 oceanCyan = vec3(0.01, 0.42, 0.55);
     vec3 oceanTurquoise = vec3(0.02, 0.65, 0.58);
     float colorMixNoise = snoise_planet(vOriginalPos * 0.8 + 12.3) * 0.5 + 0.5;
@@ -173,7 +220,10 @@ if (alphaOcean > 0.001) {
 }
 if (alphaDesert > 0.001) {
     vec3 dBase = uDesertColor;
-    if (uHasDesertMap) dBase *= texture2D(uDesertMap, vCustomUv).rgb;
+    if (uHasDesertMap) {
+        vec3 dTex = texture2D(uDesertMap, vCustomUv).rgb;
+        dBase = mix(dBase, dBase * dTex, 0.85);
+    }
     float sandGrains = snoise_planet(vOriginalPos * 250.0) * 0.04;
     float ripples = snoise_planet(vOriginalPos * 15.0) * 0.03;
     dBase += sandGrains + ripples;
@@ -692,15 +742,27 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
     const forestGLTF = useGLTF(getAssetPath('/models/forest.glb'));
     const ringFBX = useFBX(getAssetPath('/models/Ring.fbx'));
     const cloudsFBX = useFBX(getAssetPath('/models/Clouds.fbx'));
+    const cloudsClone = useMemo(() => {
+        const c = cloudsFBX.clone();
+        c.traverse((child) => {
+            if ((child as THREE.Mesh).isMesh) {
+                const mesh = child as THREE.Mesh;
+                mesh.material = (mesh.material as THREE.Material).clone();
+            }
+        });
+        return c;
+    }, [cloudsFBX]);
 
     // Load textures for rings
-    const [moonTex, martianTex, stripesTex, magmaTex, rockyMarsTex, ring0Tex] = useTexture([
+    const [moonTex, martianTex, stripesTex, magmaTex, rockyMarsTex, ring0Tex, desertTex, oceanTex] = useTexture([
         getAssetPath('/textures/rings/moon.png'),
         getAssetPath('/textures/rings/martian.png'),
         getAssetPath('/textures/rings/stripes.png'),
         getAssetPath('/textures/rings/magma.png'),
         getAssetPath('/textures/rings/mars_rocky.png'),
-        getAssetPath('/textures/rings/ring0_ochre.png')
+        getAssetPath('/textures/rings/ring0_ochre.png'),
+        getAssetPath('/1_Quiz Planet Images/each_element/desert.png'),
+        getAssetPath('/1_Quiz Planet Images/each_element/oceans.png')
     ]);
 
     // Setup planetary textures for full wrapping
@@ -998,6 +1060,8 @@ normal = normalize(cross(dFdx(vWorldPos), dFdy(vWorldPos)));
 nonPerturbedNormal = normal;
 `;
                     shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_begin>', normalLogic);
+                    shader.fragmentShader = shader.fragmentShader.replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>\n${metalnessLogicChunk}`);
+                    shader.fragmentShader = shader.fragmentShader.replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\n${roughnessLogicChunk}`);
                     shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', sharedPlanetFragLogic);
                     m.userData.shader = shader;
                 };
@@ -1055,6 +1119,8 @@ normal = normalize(cross(dFdx(vWorldPos), dFdy(vWorldPos)));
 nonPerturbedNormal = normal;
 `;
                     shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_begin>', normalLogic);
+                    shader.fragmentShader = shader.fragmentShader.replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>\n${metalnessLogicChunk}`);
+                    shader.fragmentShader = shader.fragmentShader.replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\n${roughnessLogicChunk}`);
                     shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', sharedPlanetFragLogic);
                     m.userData.shader = shader;
                 };
@@ -1112,25 +1178,65 @@ normal = normalize(cross(dFdx(vWorldPos), dFdy(vWorldPos)));
 nonPerturbedNormal = normal;
 `;
                     shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_begin>', normalLogic);
+                    shader.fragmentShader = shader.fragmentShader.replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>\n${metalnessLogicChunk}`);
+                    shader.fragmentShader = shader.fragmentShader.replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\n${roughnessLogicChunk}`);
                     shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', sharedPlanetFragLogic);
                     m.userData.shader = shader;
                 };
                 return m;
             })(),
-            // --- CLOUD ARTIFACT MATERIALS (WITH BETTER VISIBILITY) ---
-            cloudLamp: new THREE.MeshPhysicalMaterial({ 
-                color: tintColor || '#ffffff', transmission: 0.6, roughness: 0.1, thickness: 1.0, 
-                emissive: tintColor || '#ffffff', emissiveIntensity: 1.5, transparent: true, side: THREE.DoubleSide,
-                opacity: 0.6
-            }),
-            cloudSilver: new THREE.MeshStandardMaterial({ 
-                color: '#8a8a8b', metalness: 0.9, roughness: 0.15, side: THREE.DoubleSide, 
-                emissive: '#4a4a4b', emissiveIntensity: 0.5, transparent: true, opacity: 0.7
-            }),
-            cloudDarkWood: new THREE.MeshStandardMaterial({ 
-                color: '#3d2b1f', metalness: 0.1, roughness: 0.6, side: THREE.DoubleSide, 
-                transparent: true, opacity: 0.7
-            }),
+            // --- CLOUD ARTIFACT MATERIALS (WITH BETTER VISIBILITY & SHADER CONSISTENCY) ---
+            cloudLamp: (() => {
+                const m = new THREE.ShaderMaterial({
+                    uniforms: {
+                        uTime: { value: 0 },
+                        uStorm: { value: 0 },
+                        uCloudColor: { value: new THREE.Color(tintColor || '#ffffff') },
+                        uCloudOpacity: { value: 0.6 }
+                    },
+                    vertexShader: cloudVertexShader,
+                    fragmentShader: cloudFragmentShader.replace('gl_FragColor = vec4(finalColor, smoke * alpha * uCloudOpacity);', 'gl_FragColor = vec4(uCloudColor * finalColor, smoke * alpha * uCloudOpacity);'),
+                    transparent: true,
+                    side: THREE.DoubleSide,
+                    depthTest: true,
+                    depthWrite: false
+                });
+                return m;
+            })(),
+            cloudSilver: (() => {
+                const m = new THREE.ShaderMaterial({
+                    uniforms: {
+                        uTime: { value: 0 },
+                        uStorm: { value: 0 },
+                        uCloudColor: { value: new THREE.Color('#8a8a8b') },
+                        uCloudOpacity: { value: 0.7 }
+                    },
+                    vertexShader: cloudVertexShader,
+                    fragmentShader: cloudFragmentShader.replace('gl_FragColor = vec4(finalColor, smoke * alpha * uCloudOpacity);', 'gl_FragColor = vec4(uCloudColor * finalColor, smoke * alpha * uCloudOpacity);'),
+                    transparent: true,
+                    side: THREE.DoubleSide,
+                    depthTest: true,
+                    depthWrite: false
+                });
+                return m;
+            })(),
+            cloudDarkWood: (() => {
+                const m = new THREE.ShaderMaterial({
+                    uniforms: {
+                        uTime: { value: 0 },
+                        uStorm: { value: 0 },
+                        uCloudColor: { value: new THREE.Color('#3d2b1f') },
+                        uCloudOpacity: { value: 0.7 }
+                    },
+                    vertexShader: cloudVertexShader,
+                    fragmentShader: cloudFragmentShader.replace('gl_FragColor = vec4(finalColor, smoke * alpha * uCloudOpacity);', 'gl_FragColor = vec4(uCloudColor * finalColor, smoke * alpha * uCloudOpacity);'),
+                    transparent: true,
+                    side: THREE.DoubleSide,
+                    depthTest: true,
+                    depthWrite: false
+                });
+                return m;
+            })(),
             // --- FOREST ARTIFACT MATERIALS (WITH MASKING) ---
             forestLamp: (() => {
                 const m = new THREE.MeshPhysicalMaterial({
@@ -1218,9 +1324,10 @@ nonPerturbedNormal = normal;
             // Clone the entire template scene as a group
             const group = cometTemplateScene.clone();
 
-            // Random distribution around the sphere
-            const theta = Math.acos((Math.random() * 2) - 1);
-            const phi = Math.random() * Math.PI * 2;
+            // DETERMINISTIC distribution around the sphere (no Math.random)
+            // Using i as a seed for repeatable positions across all 4 renders
+            const theta = Math.acos((((i * 0.73) % 1) * 2) - 1);
+            const phi = ((i * 1.618) % 1) * Math.PI * 2;
 
             group.position.set(
                 radius * Math.sin(theta) * Math.cos(phi),
@@ -1315,13 +1422,13 @@ nonPerturbedNormal = normal;
 
     const cloudMeshCache = useMemo(() => {
         const meshes: THREE.Mesh[] = [];
-        cloudsFBX.traverse((child) => {
+        cloudsClone.traverse((child) => {
             if ((child as THREE.Mesh).isMesh) {
                 meshes.push(child as THREE.Mesh);
             }
         });
         return meshes;
-    }, [cloudsFBX]);
+    }, [cloudsClone]);
 
     const cometMeshCache = useMemo(() => {
         return cometInstances;
@@ -1329,9 +1436,9 @@ nonPerturbedNormal = normal;
 
     // Removed useEffect for Forest Geometry
 
-    // Maps removed for performance optimization
-    const desertMaps = null;
-    const oceanMaps = null;
+    // Maps for Desert and Ocean (Only for artifacts to keep quiz planet clean)
+    const desertMaps = isStatic ? desertTex : null;
+    const oceanMaps = isStatic ? oceanTex : null;
 
     // Apply uniforms updates
     useEffect(() => {
@@ -1480,54 +1587,8 @@ nonPerturbedNormal = normal;
             shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_begin>', normalLogic);
             shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', sharedPlanetFragLogic);
 
-            const metalnessLogic = `
-#include <metalnessmap_fragment>
-                float s1_m = uSliders[0];
-                float s2_m = uSliders[1];
-                float intenVolcano_m = (s1_m < 0.5) ? (0.5 - s1_m) * 2.0 : 0.0;
-                float intenOcean_m = (s1_m > 0.5) ? (s1_m - 0.5) * 2.0 : 0.0;
-                float intenDesert_m = (s2_m < 0.5) ? (0.5 - s2_m) * 2.0 : 0.0;
-                float intenForest_m = (s2_m > 0.5) ? (s2_m - 0.5) * 2.0 : 0.0;
-                vec3 seedQ1_m = vec3(0.0, 1.0, 0.0);
-                vec3 seedQ2_m = vec3(0.8, -0.5, 0.3);
-                float alphaVolcan_m = getGrowthAlpha_planet(vOriginalPos, seedQ1_m, intenVolcano_m);
-                float alphaOcean_m = getGrowthAlpha_planet(vOriginalPos, seedQ1_m, intenOcean_m);
-                float alphaDesert_m = getGrowthAlpha_planet(vOriginalPos, seedQ2_m, intenDesert_m);
-                float alphaForest_m = getGrowthAlpha_planet(vOriginalPos, seedQ2_m, intenForest_m);
-
-if (alphaVolcan_m > 0.01) metalnessFactor = mix(metalnessFactor, 0.0, alphaVolcan_m);
-if (alphaOcean_m > 0.01) metalnessFactor = mix(metalnessFactor, 0.1, alphaOcean_m);
-if (alphaDesert_m > 0.01) metalnessFactor = mix(metalnessFactor, 0.0, alphaDesert_m);
-if (alphaForest_m > 0.01) metalnessFactor = mix(metalnessFactor, 0.0, alphaForest_m);
-`;
-            shader.fragmentShader = shader.fragmentShader.replace('#include <metalnessmap_fragment>', metalnessLogic);
-
-            const roughnessLogic = `
-#include <roughnessmap_fragment>
-                float s1_r = uSliders[0];
-                float s2_r = uSliders[1];
-                float intenVolcano_r = (s1_r < 0.5) ? (0.5 - s1_r) * 2.0 : 0.0;
-                float intenOcean_r = (s1_r > 0.5) ? (s1_r - 0.5) * 2.0 : 0.0;
-                float intenDesert_r = (s2_r < 0.5) ? (0.5 - s2_r) * 2.0 : 0.0;
-                float intenForest_r = (s2_r > 0.5) ? (s2_r - 0.5) * 2.0 : 0.0;
-                vec3 seedQ1_r = vec3(0.0, 1.0, 0.0);
-                vec3 seedQ2_r = vec3(0.8, -0.5, 0.3);
-                float alphaVolcan_r = getGrowthAlpha_planet(vOriginalPos, seedQ1_r, intenVolcano_r);
-                float alphaOcean_r = getGrowthAlpha_planet(vOriginalPos, seedQ1_r, intenOcean_r);
-                float alphaDesert_r = getGrowthAlpha_planet(vOriginalPos, seedQ2_r, intenDesert_r);
-                float alphaForest_r = getGrowthAlpha_planet(vOriginalPos, seedQ2_r, intenForest_r);
-
-if (alphaVolcan_r > 0.01) roughnessFactor = mix(roughnessFactor, 1.0, alphaVolcan_r);
-if (alphaOcean_r > 0.01) {
-                    // Streaky reflections via noise-distorted roughness
-                    float rNoise = snoise_planet(vOriginalPos * 4.0 + vec3(uTime * 0.05, 0.0, 0.0)) * 0.5 + 0.5;
-                    float finalR = mix(0.01, 0.12, rNoise);
-    roughnessFactor = mix(roughnessFactor, finalR, alphaOcean_r);
-}
-if (alphaDesert_r > 0.01) roughnessFactor = mix(roughnessFactor, 1.0, alphaDesert_r);
-if (alphaForest_r > 0.01) roughnessFactor = mix(roughnessFactor, 0.8, alphaForest_r);
-`;
-            shader.fragmentShader = shader.fragmentShader.replace('#include <roughnessmap_fragment>', roughnessLogic);
+            shader.fragmentShader = shader.fragmentShader.replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>\n${metalnessLogicChunk}`);
+            shader.fragmentShader = shader.fragmentShader.replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\n${roughnessLogicChunk}`);
 
             // @ts-ignore
             mat.userData.shader = shader;
@@ -1712,6 +1773,12 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
     useFrame((state) => {
         const time = state.clock.getElapsedTime();
 
+        // Determine current colors for Desert and Ocean based on Q1 and Q2 from values
+        // Q1 (Volcano/Ocean): low: #FF4444, high: #3B82F6
+        // Q2 (Desert/Forest): low: #B45309, high: #16A34A
+        const desertColor = new THREE.Color('#B45309');
+        const oceanColor = new THREE.Color('#3B82F6');
+
         // Update Base Uniforms (Main or Artifact base)
         let activeBaseMat = materialRef.current;
         if (materialOverride === 'lamp') activeBaseMat = ringMaterials.baseLamp as THREE.MeshPhysicalMaterial;
@@ -1723,6 +1790,8 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
             if (sh.uniforms.uSliders) sh.uniforms.uSliders.value = values.map(v => v / 100);
             if (sh.uniforms.uIndices) sh.uniforms.uIndices.value = customUniforms.current.uIndices.value;
             if (sh.uniforms.uTime) sh.uniforms.uTime.value = time;
+            if (sh.uniforms.uDesertColor) sh.uniforms.uDesertColor.value = desertColor;
+            if (sh.uniforms.uOceanColor) sh.uniforms.uOceanColor.value = oceanColor;
         }
         
         // Update active forest material (standard or override)
@@ -1736,6 +1805,8 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
             if (sh.uniforms.uSliders) sh.uniforms.uSliders.value = values.map(v => v / 100);
             if (sh.uniforms.uTime) sh.uniforms.uTime.value = time;
         }
+        
+
 
         const s1_frame = values[0] / 100;
         const s2_frame = values[1] / 100;
@@ -1785,8 +1856,8 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
             // Determine ring morph values based on currentSection and slider (Question 3 logic)
             // Questions: 0: empathy, 1: sociable, 2: persistent (Q3), 3: curious, 4: relaxed
 
-            // Visibility logic: show if materialOverride exists OR if currentSection >= 2
-            const ringsVisible = materialOverride ? true : currentSection >= 2;
+            // Visibility logic: show if materialOverride exists OR if currentSection >= 2 OR isStatic
+            const ringsVisible = (materialOverride || isStatic) ? true : currentSection >= 2;
 
             // Initial Q3 state (slider 50): ring_0 = 0.5, others = 0
             let r0_val = 0.5;
@@ -1807,7 +1878,7 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
 
                 // Ring 3: 85% to 100% (0 -> 1)
                 if (s > 85) r3_val = Math.min(1.0, (s - 85) / (100 - 85));
-            } else if (currentSection > 2 || materialOverride) {
+            } else if (currentSection > 2 || materialOverride || isStatic) {
                 // If past Q3 (or in artifact view), use the final answer for Q3 (or default 50) to keep them static but visible
                 const fs = values[2] || 50;
                 r0_val = fs / 100;
@@ -1870,12 +1941,13 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
             [0.75, 0.95],
             [0.85, 1.00]
         ];
-        // Shuffle intervals to randomize which cloud disappears when
-        const shuffled = [...intervals].sort(() => Math.random() - 0.5);
+        // Ensure intervals are sorted by start (already are, but being explicit)
+        const sortedIntervals = [...intervals].sort((a, b) => a[0] - b[0]);
 
         const mapping: Record<string, number[]> = {};
-        for (let i = 1; i <= 8; i++) {
-            mapping[`Cloud_${i}`] = shuffled[i - 1];
+        // Match Cloud_1 to Cloud_8 (or more if exists) to sorted intervals
+        for (let i = 1; i <= 20; i++) {
+            mapping[`Cloud_${i}`] = sortedIntervals[(i - 1) % sortedIntervals.length];
         }
         return mapping;
     }, []);
@@ -1933,14 +2005,16 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
 
             cometMeshCache.forEach((group, idx) => {
                 // Final condition for artifacts: match exact Q5 comet count
-                const isGroupVisible = (currentSection === 4 || currentSection >= 3) && idx < cometCount;
-                group.visible = isGroupVisible;
+                // If it's an artifact render (isStatic), we base it on the curiosity slider from values[3]
+                // but we also ensure it's visible in the summary screen (currentSection === 4 or 5)
+                const isGroupVisible = (currentSection === 4 || currentSection >= 3 || !!isStatic) && idx < (cometCount ?? 0);
+                group.visible = !!isGroupVisible;
 
                 if (isGroupVisible) {
                     // Specific positioning for Magma Comets:
                     if (targetMeshTag === "optimized_2") {
                         // EDIT THESE ARRAYS TO CHANGE INDIVIDUAL MAGMA COMET POSITIONS
-                        const magmaRadii = [190, 15, 25];
+                        const magmaRadii = [195, 205, 215];
                         const magmaElevations = [
                             Math.PI / 0.8,   // Comet 1: 64 deg
                             Math.PI / 382.5, // Comet 2: 89.9 deg (Absolute Top)
@@ -1953,7 +2027,7 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
                         ];
 
                         const radius = magmaRadii[idx % 3];
-                        const elevation = magmaElevations[idx % 1];
+                        const elevation = magmaElevations[idx % 3];
                         const angle = magmaAngles[idx % 3];
 
                         const hRadius = radius * Math.cos(elevation);
@@ -1978,7 +2052,9 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
 
                             if (isTargetMesh) {
                                 // Apply material override or default
-                                mesh.material = materialOverride ? ringMaterials[materialOverride] : cometMat;
+                                // For comets, we ALWAYS use cometMat to ensure consistent emissive visibility
+                                // across all artifact renders (matches Digital render).
+                                mesh.material = cometMat;
                                 mesh.scale.set(cometScale, cometScale, cometScale);
 
                                 if (mesh.material && (mesh.material as any).uniforms?.uTime) {
@@ -2000,23 +2076,24 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
         }
 
         // --- Cloud logic ---
-        if (cloudsRef.current) {
+        if (cloudsClone) {
             // Clouds visibility and amount should match final Q5 precisely
-            const cloudsVisible = currentSection === 4;
+            // Artifacts (isStatic) should always show the clouds based on their slider
+            const cloudsVisible = currentSection === 4 || !!isStatic;
             const p = (values[4] || 0) / 100;
             const stormIntensity = Math.max(0.0, 1.0 - (p / 0.49));
 
-            cloudsRef.current.traverse((child) => {
+            cloudsClone.traverse((child) => {
                 if ((child as any).isMesh) {
                     const mesh = child as THREE.Mesh;
                     mesh.scale.set(100, 100, 100);
                     mesh.renderOrder = 10; // Ensure clouds are above planet surface in transparent renders
 
                     // Apply specialized material mapping for artifact visibility
-                    if (materialOverride === 'lamp') mesh.material = ringMaterials.cloudLamp as THREE.MeshPhysicalMaterial;
-                    else if (materialOverride === 'silver') mesh.material = ringMaterials.cloudSilver as THREE.MeshStandardMaterial;
-                    else if (materialOverride === 'darkWood') mesh.material = ringMaterials.cloudDarkWood as THREE.MeshStandardMaterial;
-                    else mesh.material = ringMaterials.cloud;
+                    if (materialOverride === 'lamp') mesh.material = ringMaterials.cloudLamp as THREE.ShaderMaterial;
+                    else if (materialOverride === 'silver') mesh.material = ringMaterials.cloudSilver as THREE.ShaderMaterial;
+                    else if (materialOverride === 'darkWood') mesh.material = ringMaterials.cloudDarkWood as THREE.ShaderMaterial;
+                    else mesh.material = ringMaterials.cloud as THREE.ShaderMaterial;
 
                     if (mesh.material instanceof THREE.ShaderMaterial) {
                         mesh.material.uniforms.uTime.value = time;
@@ -2032,7 +2109,7 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
                     }
 
                     // Cloud visibility based on section AND its individual growth
-                    mesh.visible = cloudsVisible;
+                    mesh.visible = cloudsVisible && targetVal > 0.001;
 
                     // Cloud Morphs: proportional to visibility/growth
                     if (mesh.morphTargetInfluences) {
@@ -2107,7 +2184,7 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
 
                 {/* Clouds */}
                 <primitive
-                    object={cloudsFBX}
+                    object={cloudsClone}
                     ref={cloudsRef}
                     scale={[0.004, 0.004, 0.004]}
                     position={[0, 0, 0]}
