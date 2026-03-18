@@ -47,7 +47,7 @@ export default function Error({
                 Try again
             </button>
             <div style={{ marginTop: '2rem' }}>
-                <a href="/yourplan3d" style={{ color: '#3b82f6', textDecoration: 'none' }}>Return to Home</a>
+                <a href="/" style={{ color: '#3b82f6', textDecoration: 'none' }}>Return to Home</a>
             </div>
         </div>
     );

@@ -256,6 +256,30 @@ interface DisplacementSphereProps {
     isStatic?: boolean;
 }
 
+// --- ARTIFACT TRANSFORMS (Exposed for easy manipulation) ---
+const ARTIFACT_TRANSFORMS: Record<string, { position: [number, number, number], rotation: [number, number, number], scale: number }> = {
+    default: {
+        position: [0, 0, 0],
+        rotation: [0, 0, 0],
+        scale: 1.0
+    },
+    lamp: {
+        position: [0, -2, 0],
+        rotation: [0, 0, 0],
+        scale: 1.15
+    },
+    silver: {
+        position: [-0.25, -3, 0],
+        rotation: [0, 0, 0],
+        scale: 0.8
+    },
+    darkWood: {
+        position: [0, -4.1, 0],
+        rotation: [0, 0, 0],
+        scale: 0.8
+    }
+};
+
 // --- BUTTERFLY PARTICLES ---
 // --- BUTTERFLY/FIREFLY SHADERS ---
 const butterflyVertexShader = `
@@ -998,6 +1022,50 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
                 roughness: 0.8,
                 side: THREE.DoubleSide
             }),
+            // --- THEME OVERRIDES FOR COMETS ---
+            cometLamp: new THREE.MeshPhysicalMaterial({
+                color: tintColor || '#ffffff',
+                transmission: 0.8,
+                roughness: 0.1,
+                metalness: 0.0,
+                thickness: 0.5,
+                ior: 1.5,
+                emissive: tintColor || '#ffffff',
+                emissiveIntensity: 0.5,
+                transparent: true,
+                side: THREE.DoubleSide,
+                // @ts-ignore
+                morphTargets: true
+            }),
+            cometSilver: new THREE.MeshStandardMaterial({
+                color: '#4a4a4b', metalness: 0.95, roughness: 0.15, side: THREE.DoubleSide,
+                // @ts-ignore
+                morphTargets: true
+            }),
+            cometDarkWood: new THREE.MeshStandardMaterial({
+                color: '#3d2b1f', metalness: 0.1, roughness: 0.8, side: THREE.DoubleSide,
+                // @ts-ignore
+                morphTargets: true
+            }),
+            // --- THEME OVERRIDES FOR RINGS ---
+            ringLamp: new THREE.MeshPhysicalMaterial({
+                color: tintColor || '#ffffff',
+                transmission: 0.8,
+                roughness: 0.1,
+                metalness: 0.0,
+                thickness: 0.5,
+                ior: 1.5,
+                emissive: tintColor || '#ffffff',
+                emissiveIntensity: 0.5,
+                transparent: true,
+                side: THREE.DoubleSide
+            }),
+            ringSilver: new THREE.MeshStandardMaterial({
+                color: '#4a4a4b', metalness: 0.95, roughness: 0.15, side: THREE.DoubleSide
+            }),
+            ringDarkWood: new THREE.MeshStandardMaterial({
+                color: '#3d2b1f', metalness: 0.1, roughness: 0.8, side: THREE.DoubleSide
+            }),
             // --- BASE ARTIFACT MATERIALS (WITH DISPLACEMENT) ---
             baseLamp: (() => {
                 const m = new THREE.MeshPhysicalMaterial({
@@ -1007,11 +1075,15 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
                     metalness: 0.0,
                     thickness: 0.5,
                     ior: 1.5,
-                    emissive: tintColor || '#ffffff', 
+                    emissive: tintColor || '#ffffff',
                     emissiveIntensity: 0.5,
                     transparent: true,
                     side: THREE.FrontSide
                 });
+                // @ts-ignore
+                m.morphTargets = true;
+                // @ts-ignore
+                m.morphNormals = true;
                 m.onBeforeCompile = (shader) => {
                     shader.uniforms.uSliders = customUniforms.current.uSliders;
                     shader.uniforms.uIndices = customUniforms.current.uIndices;
@@ -1071,6 +1143,10 @@ nonPerturbedNormal = normal;
                 const m = new THREE.MeshStandardMaterial({
                     color: '#4a4a4b', metalness: 0.95, roughness: 0.15, side: THREE.FrontSide
                 });
+                // @ts-ignore
+                m.morphTargets = true;
+                // @ts-ignore
+                m.morphNormals = true;
                 m.onBeforeCompile = (shader) => {
                     shader.uniforms.uSliders = customUniforms.current.uSliders;
                     shader.uniforms.uIndices = customUniforms.current.uIndices;
@@ -1130,6 +1206,10 @@ nonPerturbedNormal = normal;
                 const m = new THREE.MeshStandardMaterial({
                     color: '#3d2b1f', metalness: 0.1, roughness: 0.8, side: THREE.FrontSide
                 });
+                // @ts-ignore
+                m.morphTargets = true;
+                // @ts-ignore
+                m.morphNormals = true;
                 m.onBeforeCompile = (shader) => {
                     shader.uniforms.uSliders = customUniforms.current.uSliders;
                     shader.uniforms.uIndices = customUniforms.current.uIndices;
@@ -1195,7 +1275,7 @@ nonPerturbedNormal = normal;
                         uCloudOpacity: { value: 0.6 }
                     },
                     vertexShader: cloudVertexShader,
-                    fragmentShader: cloudFragmentShader.replace('gl_FragColor = vec4(finalColor, smoke * alpha * uCloudOpacity);', 'gl_FragColor = vec4(uCloudColor * finalColor, smoke * alpha * uCloudOpacity);'),
+                    fragmentShader: `uniform vec3 uCloudColor;\nuniform float uCloudOpacity;\n` + cloudFragmentShader.replace('gl_FragColor = vec4(color, alpha);', 'gl_FragColor = vec4(color * uCloudColor, alpha * uCloudOpacity);'),
                     transparent: true,
                     side: THREE.DoubleSide,
                     depthTest: true,
@@ -1208,11 +1288,11 @@ nonPerturbedNormal = normal;
                     uniforms: {
                         uTime: { value: 0 },
                         uStorm: { value: 0 },
-                        uCloudColor: { value: new THREE.Color('#8a8a8b') },
+                        uCloudColor: { value: new THREE.Color('#4a4a4b') },
                         uCloudOpacity: { value: 0.7 }
                     },
                     vertexShader: cloudVertexShader,
-                    fragmentShader: cloudFragmentShader.replace('gl_FragColor = vec4(finalColor, smoke * alpha * uCloudOpacity);', 'gl_FragColor = vec4(uCloudColor * finalColor, smoke * alpha * uCloudOpacity);'),
+                    fragmentShader: `uniform vec3 uCloudColor;\nuniform float uCloudOpacity;\n` + cloudFragmentShader.replace('gl_FragColor = vec4(color, alpha);', 'gl_FragColor = vec4(color * uCloudColor, alpha * uCloudOpacity);'),
                     transparent: true,
                     side: THREE.DoubleSide,
                     depthTest: true,
@@ -1229,7 +1309,7 @@ nonPerturbedNormal = normal;
                         uCloudOpacity: { value: 0.7 }
                     },
                     vertexShader: cloudVertexShader,
-                    fragmentShader: cloudFragmentShader.replace('gl_FragColor = vec4(finalColor, smoke * alpha * uCloudOpacity);', 'gl_FragColor = vec4(uCloudColor * finalColor, smoke * alpha * uCloudOpacity);'),
+                    fragmentShader: `uniform vec3 uCloudColor;\nuniform float uCloudOpacity;\n` + cloudFragmentShader.replace('gl_FragColor = vec4(color, alpha);', 'gl_FragColor = vec4(color * uCloudColor, alpha * uCloudOpacity);'),
                     transparent: true,
                     side: THREE.DoubleSide,
                     depthTest: true,
@@ -1793,7 +1873,7 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
             if (sh.uniforms.uDesertColor) sh.uniforms.uDesertColor.value = desertColor;
             if (sh.uniforms.uOceanColor) sh.uniforms.uOceanColor.value = oceanColor;
         }
-        
+
         // Update active forest material (standard or override)
         let activeForestMat = forestMaterialRef.current;
         if (materialOverride === 'lamp') activeForestMat = ringMaterials.forestLamp as THREE.MeshStandardMaterial;
@@ -1805,7 +1885,7 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
             if (sh.uniforms.uSliders) sh.uniforms.uSliders.value = values.map(v => v / 100);
             if (sh.uniforms.uTime) sh.uniforms.uTime.value = time;
         }
-        
+
 
 
         const s1_frame = values[0] / 100;
@@ -1894,7 +1974,11 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
                 const lowerName = mesh.name.toLowerCase();
 
                 // 1. Update Material and Uniforms
-                const overrideMat = materialOverride ? ringMaterials[materialOverride] : undefined;
+                let overrideMat: THREE.Material | undefined = undefined;
+                if (materialOverride === 'lamp') overrideMat = ringMaterials.ringLamp;
+                else if (materialOverride === 'silver') overrideMat = ringMaterials.ringSilver;
+                else if (materialOverride === 'darkWood') overrideMat = ringMaterials.ringDarkWood;
+
                 if (overrideMat) {
                     mesh.material = overrideMat;
                 } else if (lowerName === 'ring' || lowerName === 'ring_0') {
@@ -1955,7 +2039,7 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
     useEffect(() => {
         if (materialOverride && planetAssemblyRef.current) {
             const overrideMat = ringMaterials[materialOverride];
-            
+
             // Specialized forest materials for artifacts
             let forestOverrideMat = overrideMat;
             if (materialOverride === 'lamp') forestOverrideMat = ringMaterials.forestLamp;
@@ -1974,6 +2058,11 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
             });
         }
     }, [materialOverride, ringMaterials, baseMesh, forestMesh, ringGroup, cometInstances, cloudsFBX]);
+
+    const artifactTransform = useMemo(() => {
+        const key = materialOverride || 'default';
+        return ARTIFACT_TRANSFORMS[key] || ARTIFACT_TRANSFORMS.default;
+    }, [materialOverride]);
 
     useFrame((state) => {
         const time = state.clock.elapsedTime;
@@ -2052,9 +2141,12 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
 
                             if (isTargetMesh) {
                                 // Apply material override or default
-                                // For comets, we ALWAYS use cometMat to ensure consistent emissive visibility
-                                // across all artifact renders (matches Digital render).
-                                mesh.material = cometMat;
+                                let activeCometMat: THREE.Material = cometMat;
+                                if (materialOverride === 'lamp') activeCometMat = ringMaterials.cometLamp as THREE.MeshPhysicalMaterial;
+                                else if (materialOverride === 'silver') activeCometMat = ringMaterials.cometSilver as THREE.MeshStandardMaterial;
+                                else if (materialOverride === 'darkWood') activeCometMat = ringMaterials.cometDarkWood as THREE.MeshStandardMaterial;
+
+                                mesh.material = activeCometMat;
                                 mesh.scale.set(cometScale, cometScale, cometScale);
 
                                 if (mesh.material && (mesh.material as any).uniforms?.uTime) {
@@ -2142,7 +2234,12 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
 
             <ambientLight intensity={0.15} />
 
-            <group ref={planetAssemblyRef}>
+            <group
+                ref={planetAssemblyRef}
+                position={artifactTransform.position}
+                rotation={artifactTransform.rotation}
+                scale={artifactTransform.scale}
+            >
                 <primitive
                     object={baseMesh}
                     material={materialOverride === 'lamp' ? ringMaterials.baseLamp : (materialOverride === 'silver' ? ringMaterials.baseSilver : (materialOverride === 'darkWood' ? ringMaterials.baseDarkWood : materialRef.current))}
