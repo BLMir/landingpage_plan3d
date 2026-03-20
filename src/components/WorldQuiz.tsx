@@ -4,6 +4,7 @@ import Image from 'next/image';
 import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import styles from './WorldQuiz.module.css';
 import { Planet3D, Planet3DHandle } from './Planet3D';
+import { UnifiedArtifactRenderer } from './UnifiedArtifactRenderer';
 import { useProgress } from '@react-three/drei';
 import { ArrowLeft, ArrowRight, Download, Mail } from './Icons';
 import * as THREE from 'three';
@@ -552,13 +553,21 @@ export default function WorldQuiz() {
                                         
                                         <div className={styles.artifactCanvasWrapper}>
                                             <Suspense fallback={null}>
-                                                <Planet3D
-                                                    values={elementOptions.map(opt => elementValues[opt.id])}
-                                                    currentSection={4} // Show all elements (rings, comets, clouds)
-                                                    materialOverride={matOverride}
-                                                    tintColor={tintInfo.color}
-                                                    isStatic={true}
-                                                />
+                                                {isDigital ? (
+                                                    <div style={{ pointerEvents: 'none', width: '100%', height: '100%' }}>
+                                                        <Planet3D
+                                                            values={elementOptions.map(opt => elementValues[opt.id])}
+                                                            currentSection={4}
+                                                            tintColor={tintInfo.color}
+                                                            isStatic={true}
+                                                        />
+                                                    </div>
+                                                ) : (
+                                                    <UnifiedArtifactRenderer
+                                                        values={elementOptions.map(opt => elementValues[opt.id])}
+                                                        materialOverride={matOverride || 'digital'}
+                                                    />
+                                                )}
                                             </Suspense>
                                         </div>
 

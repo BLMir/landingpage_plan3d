@@ -9,7 +9,6 @@ interface Planet3DProps {
     currentSection: number;
     tintColor?: string;
     tintOpacity?: number;
-    materialOverride?: 'lamp' | 'silver' | 'darkWood';
     isStatic?: boolean;
 }
 
@@ -48,12 +47,11 @@ const Planet3DInner = forwardRef<Planet3DHandle, Planet3DProps>((props, ref) => 
                             currentSection={props.currentSection}
                             tintColor={props.tintColor}
                             tintOpacity={props.tintOpacity}
-                            materialOverride={props.materialOverride}
                             isStatic={props.isStatic}
                         />
                     </Suspense>
                 </scene>
-                <OrbitControls enableZoom={false} enablePan={false} />
+                {!props.isStatic && <OrbitControls enableZoom={false} enablePan={false} />}
             </Canvas>
         </div>
     );
