@@ -4,7 +4,7 @@ import Image from 'next/image';
 import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import styles from './WorldQuiz.module.css';
 import { Planet3D, Planet3DHandle } from './Planet3D';
-import { UnifiedArtifactRenderer } from './UnifiedArtifactRenderer';
+import { UnifiedArtifactRenderer, ARTIFACT_TRANSFORMS } from './UnifiedArtifactRenderer';
 import { useProgress } from '@react-three/drei';
 import { ArrowLeft, ArrowRight, Download, Mail } from './Icons';
 import * as THREE from 'three';
@@ -529,10 +529,10 @@ export default function WorldQuiz() {
                                 const isDigital = artifact.id === 'artifact_1';
                                 
                                 // Map artifact to material override
-                                let matOverride: 'lamp' | 'silver' | 'darkWood' | undefined = undefined;
+                                let matOverride: 'lamp' | 'necklace' | 'bracelet' | undefined = undefined;
                                 if (artifact.label.toLowerCase().includes('lamp')) matOverride = 'lamp';
-                                if (artifact.label.toLowerCase().includes('necklace')) matOverride = 'silver';
-                                if (artifact.label.toLowerCase().includes('bracelet')) matOverride = 'darkWood';
+                                if (artifact.label.toLowerCase().includes('necklace')) matOverride = 'necklace';
+                                if (artifact.label.toLowerCase().includes('bracelet')) matOverride = 'bracelet';
 
                                 // Map artifact to background image
                                 let bgImage = '';
@@ -560,6 +560,10 @@ export default function WorldQuiz() {
                                                             currentSection={4}
                                                             tintColor={tintInfo.color}
                                                             isStatic={true}
+                                                            planetScale={ARTIFACT_TRANSFORMS.digital.planetScale}
+                                                            cloudScale={ARTIFACT_TRANSFORMS.digital.cloudScale}
+                                                            cometScale={ARTIFACT_TRANSFORMS.digital.cometScale}
+                                                            ringScale={ARTIFACT_TRANSFORMS.digital.ringScale}
                                                         />
                                                     </div>
                                                 ) : (

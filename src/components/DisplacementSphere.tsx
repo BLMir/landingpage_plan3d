@@ -89,6 +89,12 @@ interface DisplacementSphereProps {
     tintColor?: string;
     tintOpacity?: number;
     isStatic?: boolean;
+    materialOverride?: string;
+    planetScale?: number;
+    cloudScale?: number;
+    cometScale?: number;
+    ringScale?: number;
+    cometSizeMultiplier?: number;
 }
 
 // --- BUTTERFLY PARTICLES ---
@@ -567,7 +573,13 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
     currentSection,
     tintColor,
     tintOpacity,
-    isStatic
+    isStatic,
+    materialOverride,
+    planetScale = 1.0,
+    cloudScale = 1.0,
+    cometScale = 1.0,
+    ringScale = 1.0,
+    cometSizeMultiplier = 2.0 // Jumbo size (1.0 = original)
 }) => {
     const base = useFBX(getAssetPath('/models/base.fbx'));
     const { scene: cometTemplateScene } = useGLTF(getAssetPath('/models/comet_single.glb'));
@@ -577,7 +589,6 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
     const ringFBX = useFBX(getAssetPath('/models/Ring.fbx'));
     const cloudsFBX = useFBX(getAssetPath('/models/Clouds.fbx'));
 
-    // Load textures for rings
     const [moonTex, martianTex, stripesTex, magmaTex, rockyMarsTex, ring0Tex] = useTexture([
         getAssetPath('/textures/rings/moon.png'),
         getAssetPath('/textures/rings/martian.png'),
@@ -808,6 +819,34 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
     const cloudsRef = useRef<THREE.Group>(null);
     const planetAssemblyRef = useRef<THREE.Group>(null);
 
+    const cloudsClone = useMemo(() => {
+        const group = cloudsFBX.clone();
+
+        // 1. IDENTITY & UNIT NORMALIZATION:
+        // Reset EVERY node to 1.0 scale baseline.
+        group.traverse((node: any) => {
+            if (node.scale) node.scale.set(1, 1, 1);
+            if (node.isMesh) {
+                const mesh = node as THREE.Mesh;
+                // 2. SYNCHRONOUS EXPANSION:
+                if (mesh.morphTargetInfluences && mesh.morphTargetDictionary) {
+                    const idx = mesh.morphTargetDictionary['high'];
+                    if (idx !== undefined) {
+                        mesh.morphTargetInfluences[idx] = 1.0;
+                    }
+                }
+            }
+        });
+
+        // 3. CENTRALIZED ROOT MULTIPLIER:
+        // Apply the 100.0 factor (cm to m) ONLY at the root to avoid compounding.
+        group.position.set(0, 0, 0);
+        group.rotation.set(0, 0, 0);
+        group.scale.set(100, 100, 100);
+
+        return group;
+    }, [cloudsFBX]);
+
     const forestMesh = useMemo(() => {
         return forestGLTF.scene.clone();
     }, [forestGLTF]);
@@ -815,60 +854,130 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
 
     const cometInstances = useMemo(() => {
         const instances: THREE.Group[] = [];
-        const count = 10;
-        const radius = 300; // Increased from 220 to ensure they are outside the planet surface
+        const count = 50; // High resolution for maximum separation
+        const radius = 18.0;
+
+        // Seeded RNG for 100% parity across all 4 artifact renders
+        let seed = 1234.5;
+        const rng = () => {
+            const x = Math.sin(seed++) * 10000;
+            return x - Math.floor(x);
+        };
+
+        // Arrays for initialization:
+        const magmaRadii = [23.5, 23.5, 23.5]; 
+        const magmaElevations = [
+            Math.PI / 2.1,  // ~85 deg (Pole)
+            Math.PI / 4.0,  // ~45 deg (Mid-Northern)
+            Math.PI / 8.0   // ~22 deg (Lower-Northern)
+        ];
+        const magmaAngles = [
+            (10 * Math.PI / 180),        // 10 deg
+            (130 * Math.PI / 180),       // 130 deg
+            (250 * Math.PI / 180)        // 250 deg
+        ];
+
+        // Synchronous Initial State for Artifacts (Demand Frameloop)
+        const curiousValue = values[3] || 50;
+        let cometCount = 0;
+        let targetMeshTag = "optimized_1";
+        if (curiousValue >= 50.1) {
+            targetMeshTag = "optimized_1";
+            // Scale from 2 (at 51%) up to 5 (at 100%)
+            cometCount = 2 + Math.floor(((curiousValue - 50.1) / 49.9) * 3.99);
+        } else if (curiousValue <= 49.9) {
+            targetMeshTag = "optimized_2";
+            cometCount = Math.max(1, 1 + Math.floor(((49.9 - curiousValue) / 50.0) * 2.99));
+        }
 
         for (let i = 0; i < count; i++) {
-            // Clone the entire template scene as a group
             const group = cometTemplateScene.clone();
 
-            // Random distribution around the sphere
-            const theta = Math.acos((Math.random() * 2) - 1);
-            const phi = Math.random() * Math.PI * 2;
+            // 0. Identity Reset & Unit Normalization
+            group.traverse((node: any) => {
+                if (node.scale) node.scale.set(1, 1, 1);
+            });
 
-            group.position.set(
-                radius * Math.sin(theta) * Math.cos(phi),
-                radius * Math.sin(theta) * Math.sin(phi),
-                radius * Math.cos(theta)
+            // 1. STANDARD POSITION (BLUE) - Fibonacci Sphere (Sunflower) distribution
+            // This provides the most equidistant distribution on a sphere.
+            const y = 1 - (i / (count - 1)) * 2; // y goes from 1 to -1
+            const r_lat = Math.sqrt(Math.max(0, 1 - y * y));
+            const phi_fib = Math.PI * (3 - Math.sqrt(5)) * (i + 1); // golden angle increment
+
+            const standardPos = new THREE.Vector3(
+                r_lat * Math.cos(phi_fib) * radius,
+                y * radius,
+                r_lat * Math.sin(phi_fib) * radius
             );
 
-            // Make them look at center
-            group.lookAt(0, 0, 0);
+            // 2. MAGMA Logic:
+            // Restore legacy fixed coordinates for the first 3 comets (Optimized 2).
+            let magmaPos = standardPos.clone();
+            if (i < 3) {
+                const r = magmaRadii[i];
+                const elev = magmaElevations[i];
+                const ang = magmaAngles[i];
+                const hR = r * Math.cos(elev);
+                magmaPos.set(
+                    hR * Math.cos(ang),
+                    r * Math.sin(elev),
+                    hR * Math.sin(ang)
+                );
+            }
 
-            // Store original random position in userData for resetting later
-            group.userData.originalPos = new THREE.Vector3().copy(group.position);
+            // 3. SYNCHRONOUS ORIENTATION:
+            group.position.copy(magmaPos);
+            if (i < 3) {
+                // Legacy Radial Orientation for Magma
+                group.lookAt(0, 30, 0);
+            } else {
+                // New Tangential Orientation for Blue (Anti-Intersection)
+                const forward = new THREE.Vector3().crossVectors(magmaPos, new THREE.Vector3(190, 100, 290)).normalize();
+                group.lookAt(magmaPos.clone().add(forward));
+            }
 
-            // Name the group for sequential reveal logic
-            group.name = `OpenToExpGroup_${i + 1}`;
+            group.userData.standardPos = standardPos;
+            group.userData.magmaPos = magmaPos;
+            group.userData.orientation = group.quaternion.clone();
 
             instances.push(group);
         }
         return instances;
-    }, [cometTemplateScene]);
+    }, [cometTemplateScene]); // Removed values/currentSection to prevent expensive rebuilds during interaction.
 
 
 
-    useEffect(() => {
-        if (cometRef.current) {
-            cometRef.current.clear();
-            cometInstances.forEach(inst => cometRef.current?.add(inst));
-        }
-    }, [cometInstances]);
+
+
 
     const ringGroup = useMemo(() => {
         const group = ringFBX.clone();
-        group.traverse((child) => {
-            if ((child as THREE.Mesh).isMesh) {
-                const mesh = child as THREE.Mesh;
-                // 1. Morph enforcement - Force all to 1.0 for expanded state
+
+        // 1. IDENTITY & UNIT NORMALIZATION:
+        group.traverse((node: any) => {
+            if (node.scale) node.scale.set(1, 1, 1);
+            if (node.isMesh) {
+                const mesh = node as THREE.Mesh;
+                // 2. COMPREHENSIVE MORPH RESET (Expansion Only)
                 if (mesh.morphTargetInfluences) {
                     for (let i = 0; i < mesh.morphTargetInfluences.length; i++) {
-                        mesh.morphTargetInfluences[i] = 1.0;
+                        mesh.morphTargetInfluences[i] = 0.0;
+                    }
+                    if (mesh.morphTargetDictionary) {
+                        const highIdx = mesh.morphTargetDictionary['high'];
+                        if (highIdx !== undefined) {
+                            mesh.morphTargetInfluences[highIdx] = 1.0;
+                        }
                     }
                 }
-                // (Geometry translation removed as it breaks morph attribute sync)
             }
         });
+
+        // 3. CENTRALIZED ROOT MULTIPLIER:
+        group.position.set(0, 0, 0);
+        group.rotation.set(0, 0, 0);
+        group.scale.set(100, 100, 100);
+
         return group;
     }, [ringFBX]);
 
@@ -897,15 +1006,51 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
     }, [base]);
 
     // CACHE MESHES FOR PERFORMANCE (Avoid traverses in useFrame)
-    const baseMeshCache = useMemo(() => {
-        const meshes: any[] = [];
-        baseMesh.traverse((child: any) => {
-            if (child.isMesh && child.morphTargetInfluences) {
-                meshes.push(child);
-            }
+    // Handle Material Override (from UnifiedArtifactRenderer)
+    const themedMat = useRef<THREE.Material | null>(null);
+    const themedMatForest = useRef<THREE.Material | null>(null);
+    const themedMatRing = useRef<THREE.Material | null>(null);
+    useEffect(() => {
+        if (!materialOverride) {
+            themedMat.current = null;
+            themedMatForest.current = null;
+            themedMatRing.current = null;
+            return;
+        }
+        import('./UnifiedArtifactRenderer').then(mod => {
+            const baseMat = (mod.ARTIFACT_MATERIALS as any)[materialOverride] || mod.ARTIFACT_MATERIALS.digital;
+            const createM = (isF: number, isR: number) => {
+                const m = baseMat.clone();
+                m.onBeforeCompile = (sh: any) => {
+                    if (!m.userData) (m as any).userData = {};
+                    m.userData.shader = sh;
+                    mod.applyArtifactShader(sh, {
+                        uSliders: { value: values.map(v => v / 100) },
+                        uTime: { value: 0 },
+                        uIndices: { value: new Int32Array(8).fill(-1) },
+                        uDesertMap: { value: (desertMaps && desertMaps[0]) || null },
+                        uOceanMap: { value: (oceanMaps && oceanMaps[0]) || null },
+                        uHasDesertMap: { value: desertMaps ? 1.0 : 0.0 },
+                        uHasOceanMap: { value: oceanMaps ? 1.0 : 0.0 }
+                    });
+                    sh.uniforms.uIsForest.value = isF;
+                    sh.uniforms.uIsRing.value = isR;
+                };
+                return m;
+            };
+            themedMat.current = createM(0, 0);
+            themedMatForest.current = createM(1, 0);
+            themedMatRing.current = createM(0, 1);
         });
-        return meshes;
-    }, [baseMesh]);
+    }, [materialOverride]);
+
+    const baseMeshCache = useMemo(() => {
+        const cache: THREE.Mesh[] = [];
+        base.traverse((child: any) => {
+            if (child.isMesh) cache.push(child);
+        });
+        return cache;
+    }, [base]);
 
     const ringMeshCache = useMemo(() => {
         const meshes: THREE.Mesh[] = [];
@@ -1441,6 +1586,9 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
             });
         };
         setupForestMesh(forestMesh);
+        if (themedMatForest.current) {
+            forestMesh.traverse((child: any) => { if (child.isMesh) child.material = themedMatForest.current; });
+        }
 
         // @ts-ignore
         forestMaterialRef.current = fMat;
@@ -1477,26 +1625,42 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
             for (const key in dict) {
                 const k = key.toLowerCase();
                 const idx = dict[key];
-                if (k.includes('ocean')) {
-                    child.morphTargetInfluences[idx] = activeOcean;
-                    if (idx < 8) indices[idx] = 1;
-                } else if (k.includes('desert')) {
-                    child.morphTargetInfluences[idx] = activeDesert;
-                    if (idx < 8) indices[idx] = 0;
-                } else if (k.includes('volcan')) {
-                    child.morphTargetInfluences[idx] = activeVolcan;
-                    if (idx < 8) indices[idx] = 2;
-                } else if (k.includes('forest')) {
-                    child.morphTargetInfluences[idx] = activeForest;
-                    if (idx < 8) indices[idx] = 3;
+                if (child.morphTargetInfluences) {
+                    if (k.includes('ocean')) {
+                        child.morphTargetInfluences[idx] = activeOcean;
+                        if (idx < 8) indices[idx] = 1;
+                    } else if (k.includes('desert')) {
+                        child.morphTargetInfluences[idx] = activeDesert;
+                        if (idx < 8) indices[idx] = 0;
+                    } else if (k.includes('volcan')) {
+                        child.morphTargetInfluences[idx] = activeVolcan;
+                        if (idx < 8) indices[idx] = 2;
+                    } else if (k.includes('forest')) {
+                        child.morphTargetInfluences[idx] = activeForest;
+                        if (idx < 8) indices[idx] = 3;
+                    }
                 }
             }
 
-            // Update Indices for the shader
-            const sh = materialRef.current?.userData?.shader;
-            if (sh && sh.uniforms.uIndices) {
-                sh.uniforms.uIndices.value = indices;
-            }
+            // Update Indices and Sliders for ALL shaders (Interactive & Artifact)
+            const sliderValues = values.map(v => v / 100);
+            const mats = [
+                materialRef.current,
+                themedMat.current,
+                themedMatForest.current,
+                themedMatRing.current,
+                ringMaterials.cloud,
+                forestMaterialRef.current
+            ];
+            mats.forEach(m => {
+                if (!m) return;
+                const sh = (m as any).userData?.shader || (m.type === 'ShaderMaterial' ? (m as any) : null);
+                if (sh) {
+                    sh.uniforms.uTime.value = time;
+                    if (sh.uniforms.uIndices) sh.uniforms.uIndices.value = indices;
+                    if (sh.uniforms.uSliders) sh.uniforms.uSliders.value = sliderValues;
+                }
+            });
         });
     });
 
@@ -1547,30 +1711,21 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
                     (mesh.material as any).uniforms.uTime.value = state.clock.elapsedTime;
                 }
 
-                // 2. Assign specific materials and handle scales 
+                // 2. Assign specific morph values based on mesh name
                 let activeMorph = 0;
-                if (lowerName === 'ring' || lowerName === 'ring_0') {
-                    mesh.material = ringMaterials.planetary;
-                    mesh.scale.set(100, 100, 100);
-                    activeMorph = r0_val;
-                } else if (lowerName === 'ring_1') {
-                    mesh.material = ringMaterials.magma;
-                    mesh.scale.set(100, 100, 100);
-                    activeMorph = r1_val;
-                } else if (lowerName === 'ring_2') {
-                    mesh.material = ringMaterials.moon;
-                    mesh.scale.set(100, 100, 100);
-                    activeMorph = r2_val;
-                } else if (lowerName === 'ring_3') {
-                    mesh.material = ringMaterials.martian;
-                    mesh.scale.set(100, 100, 100);
-                    activeMorph = r3_val;
-                }
+                if (lowerName.includes('ring_0')) activeMorph = r0_val;
+                else if (lowerName.includes('ring_1')) activeMorph = r1_val;
+                else if (lowerName.includes('ring_2')) activeMorph = r2_val;
+                else if (lowerName.includes('ring_3')) activeMorph = r3_val;
+                // 2. Morph expansion & Scale (Interactive Only)
+                // Total Scale = Root(1.0) * Mesh(100 * ringScale)
+                if (!isStatic) {
+                    mesh.scale.set(ringScale, ringScale, ringScale);
 
-                // 3. Dynamic Morph Target Enforcement (high state)
-                if (mesh.morphTargetInfluences) {
-                    for (let i = 0; i < mesh.morphTargetInfluences.length; i++) {
-                        mesh.morphTargetInfluences[i] = activeMorph;
+                    if (mesh.morphTargetInfluences) {
+                        for (let i = 0; i < mesh.morphTargetInfluences.length; i++) {
+                            mesh.morphTargetInfluences[i] = activeMorph;
+                        }
                     }
                 }
             });
@@ -1588,8 +1743,13 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
             [0.75, 0.95],
             [0.85, 1.00]
         ];
-        // Shuffle intervals to randomize which cloud disappears when
-        const shuffled = [...intervals].sort(() => Math.random() - 0.5);
+        // Seeded RNG for 100% parity across artifacts
+        let seed = 5678.9;
+        const rng = () => {
+            const x = Math.sin(seed++) * 10000;
+            return x - Math.floor(x);
+        };
+        const shuffled = [...intervals].sort(() => rng() - 0.5);
 
         const mapping: Record<string, number[]> = {};
         for (let i = 1; i <= 8; i++) {
@@ -1608,18 +1768,18 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
             let cometCount = 0;
             let cometMat = ringMaterials.Comet_optimized_1;
             let targetMeshTag = "optimized_1";
-            let cometScale = 75;
+            let vCometScale = 35;
 
             if (curiousValue >= 50.1) { // High Curiosity: Blue Comets
                 cometMat = ringMaterials.Comet_optimized_1;
                 targetMeshTag = "optimized_1";
-                cometScale = 75;
-                // Scale from 2 (at 51%) up to 6 (at 100%)
-                cometCount = 2 + Math.floor(((curiousValue - 50.1) / 49.9) * 4.99);
+                vCometScale = 53;
+                // Scale from 2 (at 51%) up to 5 (at 100%)
+                cometCount = 2 + Math.floor(((curiousValue - 50.1) / 49.9) * 3.99);
             } else if (curiousValue <= 49.9) { // Low Curiosity: Magma Comets
                 cometMat = ringMaterials.Comet_optimized_2;
                 targetMeshTag = "optimized_2";
-                cometScale = 110;
+                vCometScale = 110;
                 // 49.9% -> 1, 0% -> 3
                 cometCount = Math.max(1, 1 + Math.floor(((49.9 - curiousValue) / 50.0) * 2.99));
             } else {
@@ -1627,40 +1787,25 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
             }
 
             cometMeshCache.forEach((group, idx) => {
-                const isGroupVisible = currentSection > 3 || (currentSection === 3 && idx < cometCount);
+                // Magma (Optimized 2) uses fixed indices 0, 1, 2.
+                let finalIdx = idx;
+                if (curiousValue >= 50.1) {
+                    // Blue (Optimized 1) uses a 10-step gap starting at 5
+                    finalIdx = idx * 10 + 5;
+                }
+
+                const isGroupVisible = (currentSection >= 3 && idx < cometCount);
                 group.visible = isGroupVisible;
 
                 if (isGroupVisible) {
-                    // Specific positioning for Magma Comets:
-                    if (targetMeshTag === "optimized_2") {
-                        // EDIT THESE ARRAYS TO CHANGE INDIVIDUAL MAGMA COMET POSITIONS
-                        const magmaRadii = [200, 800, 180];
-                        const magmaElevations = [
-                            Math.PI / 5.8,   // Comet 1: 64 deg
-                            Math.PI / 2.001, // Comet 2: 89.9 deg (Absolute Top)
-                            Math.PI / 2.0    // Comet 3: 45 deg
-                        ];
-                        const magmaAngles = [
-                            (10 * Math.PI / -360),   // Comet 1 (your latest edit)
-                            (50 * Math.PI / 140), // Comet 2
-                            (200 * Math.PI / 1) + Math.PI // Comet 3 (auto-spaced)
-                        ];
+                    // Pull position from the disjoint Fibonacci spot
+                    const targetInstance = cometInstances[finalIdx] || group;
+                    const posToUse = targetInstance.userData.magmaPos || targetInstance.userData.standardPos;
+                    if (posToUse) group.position.copy(posToUse);
 
-                        const radius = magmaRadii[idx % 3];
-                        const elevation = magmaElevations[idx % 3];
-                        const angle = magmaAngles[idx % 3];
-
-                        const hRadius = radius * Math.cos(elevation);
-                        group.position.set(
-                            hRadius * Math.cos(angle),
-                            radius * Math.sin(elevation),
-                            hRadius * Math.sin(angle)
-                        );
-                        group.lookAt(0, 0, 0);
-                    } else if (group.userData.originalPos) {
-                        // Revert to random for model 1
-                        group.position.copy(group.userData.originalPos);
-                        group.lookAt(0, 0, 0);
+                    // Use PRE-CALCULATED Orientation from that spot
+                    if (targetInstance.userData.orientation) {
+                        group.quaternion.copy(targetInstance.userData.orientation);
                     }
                     group.traverse((child) => {
                         const mesh = child as THREE.Mesh;
@@ -1671,8 +1816,17 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
                             mesh.visible = isTargetMesh;
 
                             if (isTargetMesh) {
+                                // COMETS must use their original shader material (cometMat) 
+                                // to maintain their glowing look across all artifacts.
                                 mesh.material = cometMat;
-                                mesh.scale.set(cometScale, cometScale, cometScale);
+
+                                // Combined scale: local vCometScale * prop cometScale * base multiplier
+                                // NOTE: Magma comets ignore the jumbo multiplier to keep their legacy size
+                                let finalCometScale = vCometScale * cometScale;
+                                if (curiousValue >= 50.1) {
+                                    finalCometScale *= cometSizeMultiplier;
+                                }
+                                mesh.scale.set(finalCometScale, finalCometScale, finalCometScale);
 
                                 if (mesh.material && (mesh.material as any).uniforms?.uTime) {
                                     (mesh.material as any).uniforms.uTime.value = time;
@@ -1694,16 +1848,21 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
 
         // --- Cloud logic ---
         if (cloudsRef.current) {
-            const cloudsVisible = currentSection === 4;
-            const p = (values[4] || 0) / 100;
+            const cloudsVisible = currentSection >= 4;
+            // The less % the more clouds as it was before
+            const p = 1.0 - ((values[4] || 0) / 100); 
             const stormIntensity = Math.max(0.0, 1.0 - (p / 0.49));
 
             cloudsRef.current.traverse((child) => {
                 if ((child as any).isMesh) {
                     const mesh = child as THREE.Mesh;
                     mesh.visible = cloudsVisible;
-                    mesh.scale.set(100, 100, 100);
-                    mesh.material = ringMaterials.cloud;
+                    mesh.material = themedMat.current || ringMaterials.cloud;
+
+                    // 1. Morph expansion & Scale (Interactive Only)
+                    if (!isStatic) {
+                        mesh.scale.set(cloudScale, cloudScale, cloudScale);
+                    }
 
                     if (mesh.material instanceof THREE.ShaderMaterial) {
                         mesh.material.uniforms.uTime.value = time;
@@ -1712,13 +1871,17 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
 
                     const name = mesh.name;
                     let targetVal = 1.0;
-                    const interval = cloudMapping[name];
+                    // Support fuzzy name matching (Cloud_1, Cloud001, etc.)
+                    const cloudKey = Object.keys(cloudMapping).find(k => name.toLowerCase().includes(k.toLowerCase()));
+                    const interval = cloudKey ? cloudMapping[cloudKey] : null;
+
                     if (interval) {
                         const [start, end] = interval;
-                        targetVal = 1.0 - Math.min(1.0, Math.max(0.0, (p - start) / (end - start)));
+                        // Higher relaxation (p) should INCREASE cloud presence
+                        targetVal = Math.min(1.0, Math.max(0.0, (p - start) / (end - start)));
                     }
 
-                    if (mesh.morphTargetInfluences && mesh.morphTargetDictionary) {
+                    if (mesh.morphTargetInfluences && mesh.morphTargetDictionary && !isStatic) {
                         const idx = mesh.morphTargetDictionary['high'];
                         if (idx !== undefined) {
                             mesh.morphTargetInfluences[idx] = targetVal;
@@ -1752,24 +1915,53 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
             <ambientLight intensity={0.15} />
 
             <group ref={planetAssemblyRef}>
-                <primitive object={baseMesh} material={materialRef.current} scale={0.004} name="planet_base" />
+                <primitive
+                    object={baseMesh}
+                    material={themedMat.current || materialRef.current}
+                    scale={0.004 * planetScale}
+                    name="planet_base"
+                />
                 <primitive
                     object={forestMesh}
-                    material={forestMaterialRef.current}
-                    scale={0.395}
+                    material={themedMat.current || forestMaterialRef.current}
+                    scale={0.395 * planetScale}
                     position={[0, 0, 0]}
                     rotation={[-1.5, 0, 0.05]}
                     name="planet_forest"
                 />
                 {/* Butterflies appear when Forest slider > 50% */}
-                {/* Q3 Rings */}
-                <primitive object={ringGroup} ref={ringRef} scale={[0.004, 0.004, 0.004]} position={[0, 0, 0]} name="ring_group" />
+                {/* Q3 Rings - Wrapped to preserve 100x unit scale */}
+                <group
+                    ref={ringRef}
+                    scale={[0.004 * ringScale, 0.004 * ringScale, 0.004 * ringScale]}
+                    name="ring_group_wrapper"
+                >
+                    <primitive
+                        object={ringGroup}
+                        name="ring_primitive"
+                    />
+                </group>
 
-                {/* Comets */}
-                <group ref={cometRef} scale={[0.004, 0.004, 0.004]} position={[0, 0, 0]} name="comet_group" />
+                {/* Comets - Synchronous Mounting */}
+                <group
+                    ref={cometRef}
+                    scale={[0.004 * cometScale, 0.004 * cometScale, 0.004 * cometScale]}
+                    position={[0, 0, 0]}
+                    name="comet_group"
+                >
+                    {cometInstances.map((comet, i) => (
+                        <primitive key={i} object={comet} />
+                    ))}
+                </group>
 
                 {/* Clouds */}
-                <primitive object={cloudsFBX} ref={cloudsRef} scale={[0.004, 0.004, 0.004]} position={[0, 0, 0]} name="clouds_group" />
+                <group ref={cloudsRef} scale={[0.004 * cloudScale, 0.004 * cloudScale, 0.004 * cloudScale]}>
+                    <primitive
+                        object={cloudsClone}
+                        material={themedMat.current || ringMaterials.cloud}
+                        name="clouds_group"
+                    />
+                </group>
 
                 <ButterflyParticles
                     intensity={(values[1] > 50) ? (values[1] - 50) / 50 : 0}
