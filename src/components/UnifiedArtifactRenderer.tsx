@@ -5,11 +5,13 @@ import * as THREE from 'three';
 import { MeshStandardMaterial } from 'three';
 
 // --- ARTIFACT TRANSFORMS (Position, Rotation, and Scaling) ---
-export const ARTIFACT_TRANSFORMS: Record<string, { position: [number, number, number], rotation: [number, number, number], planetScale: number, cloudScale: number, cometScale: number, ringScale: number }> = {
-    digital: { position: [0, 0, 0], rotation: [0, 0, 0], planetScale: 1.0, cloudScale: 1.0, cometScale: 0.95, ringScale: 1.0 },
-    lamp: { position: [0, -2, 0], rotation: [0, 0, 0], planetScale: 1.0, cloudScale: 1.0, cometScale: 1.0, ringScale: 1.0 },
-    necklace: { position: [-0.25, -3, 0], rotation: [0, 0, 0], planetScale: 1.0, cloudScale: 1.0, cometScale: 1.0, ringScale: 1.0 },
-    bracelet: { position: [0, -4.1, 0], rotation: [0, 0, 0], planetScale: 1.0, cloudScale: 1.0, cometScale: 1.0, ringScale: 1.0 }
+export const GLOBAL_POSITION_OFFSET: [number, number, number] = [0, 0, 0]; // Bulk shift for all 4 slots
+export const GLOBAL_SCALE_MULTIPLIER: number = 1.0; // Global master scale for everything
+export const ARTIFACT_TRANSFORMS: Record<string, { position: [number, number, number], rotation: [number, number, number], overallScale: number, planetScale: number, cloudScale: number, cometScale: number, ringScale: number }> = {
+    digital: { position: [0, 0, 0], rotation: [-9, 70, 0], overallScale: 1.0, planetScale: 1.0, cloudScale: 1.0, cometScale: 0.95, ringScale: 1.0 },
+    lamp: { position: [0, -2, 0], rotation: [-9, 70, 0], overallScale: 1.0, planetScale: 1.0, cloudScale: 1.0, cometScale: 1.0, ringScale: 1.0 },
+    necklace: { position: [-0.75, -3, 0], rotation: [-9, 70, 0], overallScale: 0.9, planetScale: 1.0, cloudScale: 1.0, cometScale: 1.0, ringScale: 1.0 },
+    bracelet: { position: [0, -4.1, 0], rotation: [-9, 70, 0], overallScale: 0.7, planetScale: 1.0, cloudScale: 1.0, cometScale: 1.0, ringScale: 1.0 }
 };
 
 // --- SHADER HELPERS (Wow Procedural Patterns) ---
@@ -182,17 +184,31 @@ export const UnifiedArtifactRenderer: React.FC<ArtifactProps> = ({ values, mater
 const InnerArtifact: React.FC<ArtifactProps> = ({ values, materialOverride }) => {
     const trans = ARTIFACT_TRANSFORMS[materialOverride] || ARTIFACT_TRANSFORMS.digital;
 
+    // Apply Global Offset:
+    const finalPos: [number, number, number] = [
+        trans.position[0] + GLOBAL_POSITION_OFFSET[0],
+        trans.position[1] + GLOBAL_POSITION_OFFSET[1],
+        trans.position[2] + GLOBAL_POSITION_OFFSET[2]
+    ];
+
+    // Bulk scale multipliers (Multi-tier: per-render x global master)
+    const master = GLOBAL_SCALE_MULTIPLIER * (trans.overallScale || 1.0);
+    const pS = trans.planetScale * master;
+    const cS = trans.cloudScale * master;
+    const mS = trans.cometScale * master;
+    const rS = trans.ringScale * master;
+
     return (
-        <group position={trans.position} rotation={trans.rotation}>
+        <group position={finalPos} rotation={trans.rotation}>
             <DisplacementSphere
                 values={values}
                 currentSection={4} // Final state
                 isStatic={true}
                 materialOverride={materialOverride}
-                planetScale={trans.planetScale}
-                cloudScale={trans.cloudScale}
-                cometScale={trans.cometScale}
-                ringScale={trans.ringScale}
+                planetScale={pS}
+                cloudScale={cS}
+                cometScale={mS}
+                ringScale={rS}
             />
         </group>
     );
