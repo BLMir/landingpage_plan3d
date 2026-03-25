@@ -341,12 +341,14 @@ const windFragmentShader = `
     }
 `;
 
-const ButterflyParticles: React.FC<{ intensity: number, radius?: number, speed?: number, rotation?: [number, number, number] }> = ({
+const ButterflyParticles: React.FC<{ intensity: number, radius?: number, speed?: number, rotation?: [number, number, number], isStatic?: boolean }> = ({
     intensity,
     radius = 2.15,
     speed = 1.0,
-    rotation = [0, 0, 0]
+    rotation = [0, 0, 0],
+    isStatic = false,
 }) => {
+    if (isStatic) return null;
     const count = 400; // Slightly reduced from 600 to avoid clutter
     const meshRef = useRef<THREE.Points>(null);
     const materialRef = useRef<THREE.ShaderMaterial>(null);
@@ -447,12 +449,14 @@ const ButterflyParticles: React.FC<{ intensity: number, radius?: number, speed?:
     );
 };
 
-const WindParticles: React.FC<{ intensity: number, radius?: number, speed?: number, rotation?: [number, number, number] }> = ({
+const WindParticles: React.FC<{ intensity: number, radius?: number, speed?: number, rotation?: [number, number, number], isStatic?: boolean }> = ({
     intensity,
     radius = 3.5,
     speed = 1.0,
-    rotation = [0, 0, 0]
+    rotation = [0, 0, 0],
+    isStatic = false,
 }) => {
+    if (isStatic) return null;
     const streakCount = 60; // Fewer but thicker
     const segmentsPerStreak = 8; // Smooth curving
 
@@ -898,12 +902,24 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
                 if (node.scale) node.scale.set(1, 1, 1);
             });
 
-            // 1. STANDARD POSITION (BLUE) - Fibonacci Sphere (Sunflower) distribution
-            // This provides the most equidistant distribution on a sphere.
-            const y = 1 - (i / (count - 1)) * 2; // y goes from 1 to -1
-            const r_lat = Math.sqrt(Math.max(0, 1 - y * y));
-            const phi_fib = Math.PI * (3 - Math.sqrt(5)) * (i + 1); // golden angle increment
+            // 1. STANDARD POSITION (BLUE) - Lane-Locked distribution
+            // Pre-calculate 5 explicit lanes for indices (5, 15, 25, 35, 45) to ensure zero intersection.
+            let y = 1 - (i / (count - 1)) * 2; // Default Fibonacci
+            let phi_fib = Math.PI * (3 - Math.sqrt(5)) * (i + 1); // Default Golden Angle
 
+            // Lane assignment for the 5 Jumbo Blue comets:
+            const blueSpots = [5, 15, 25, 35, 45];
+            const spotIdx = blueSpots.indexOf(i);
+            if (spotIdx !== -1) {
+                // EXPLICIT LANES: [North, Mid-North, Equator, Mid-South, South]
+                // Spread latitudes by 0.35 - 0.45 units Y to guarantee zero overlap with Jumbo scale.
+                const yLanes = [0.75, 0.40, 0.05, -0.35, -0.75]; // Latitude bands
+                const pLanes = [0, 1.25, 2.50, 3.75, 5.0]; // Longitude spread
+                y = yLanes[spotIdx];
+                phi_fib = pLanes[spotIdx] + (curiousValue * 0.005); // Initial seed + interaction
+            }
+
+            const r_lat = Math.sqrt(Math.max(0, 1 - y * y));
             const standardPos = new THREE.Vector3(
                 r_lat * Math.cos(phi_fib) * radius,
                 y * radius,
@@ -1010,11 +1026,13 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
     const themedMat = useRef<THREE.Material | null>(null);
     const themedMatForest = useRef<THREE.Material | null>(null);
     const themedMatRing = useRef<THREE.Material | null>(null);
+    const cleanMat = useRef<THREE.Material | null>(null);
     useEffect(() => {
         if (!materialOverride) {
             themedMat.current = null;
             themedMatForest.current = null;
             themedMatRing.current = null;
+            cleanMat.current = null;
             return;
         }
         import('./UnifiedArtifactRenderer').then(mod => {
@@ -1041,16 +1059,17 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
             themedMat.current = createM(0, 0);
             themedMatForest.current = createM(1, 0);
             themedMatRing.current = createM(0, 1);
+            cleanMat.current = baseMat.clone();
         });
     }, [materialOverride]);
 
     const baseMeshCache = useMemo(() => {
         const cache: THREE.Mesh[] = [];
-        base.traverse((child: any) => {
+        baseMesh.traverse((child: any) => {
             if (child.isMesh) cache.push(child);
         });
         return cache;
-    }, [base]);
+    }, [baseMesh]);
 
     const ringMeshCache = useMemo(() => {
         const meshes: THREE.Mesh[] = [];
@@ -1617,8 +1636,18 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
         const activeDesert = (s2_frame < 0.5) ? 1.0 : 0.0;
         const activeForest = (s2_frame > 0.5) ? 1.0 : 0.0;
 
+        const isDigital = materialOverride === 'digital';
+        const useThemedBase = materialOverride && !isDigital && themedMat.current;
+        const useThemedForest = materialOverride && !isDigital && themedMatForest.current;
+
         // Unified Mesh control using cached references
         baseMeshCache.forEach((child) => {
+            if (useThemedBase) {
+                child.material = themedMat.current as THREE.Material;
+            } else if (materialRef.current) {
+                child.material = materialRef.current as THREE.Material;
+            }
+
             const dict = child.morphTargetDictionary || {};
             const indices = new Int32Array(8).fill(-1);
 
@@ -1662,6 +1691,18 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
                 }
             });
         });
+
+        if (forestMesh) {
+            forestMesh.traverse((child: any) => {
+                if (child.isMesh) {
+                    if (useThemedForest) {
+                        child.material = themedMatForest.current as THREE.Material;
+                    } else if (forestMaterialRef.current) {
+                        child.material = forestMaterialRef.current as THREE.Material;
+                    }
+                }
+            });
+        }
     });
 
     useFrame((state) => {
@@ -1703,6 +1744,15 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
             ringMeshCache.forEach((mesh) => {
                 mesh.visible = ringsVisible;
                 mesh.frustumCulled = false;
+
+                const isDigital = materialOverride === 'digital';
+                const useThemed = materialOverride && !isDigital && cleanMat.current;
+                
+                if (!mesh.userData.originalMaterial) {
+                    mesh.userData.originalMaterial = mesh.material;
+                }
+                
+                mesh.material = useThemed ? (cleanMat.current as THREE.Material) : mesh.userData.originalMaterial;
 
                 const lowerName = mesh.name.toLowerCase();
 
@@ -1817,8 +1867,9 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
 
                             if (isTargetMesh) {
                                 // COMETS must use their original shader material (cometMat) 
-                                // to maintain their glowing look across all artifacts.
-                                mesh.material = cometMat;
+                                const isDigital = materialOverride === 'digital';
+                                const useThemed = materialOverride && !isDigital && cleanMat.current;
+                                mesh.material = useThemed ? (cleanMat.current as THREE.Material) : cometMat;
 
                                 // Combined scale: local vCometScale * prop cometScale * base multiplier
                                 // NOTE: Magma comets ignore the jumbo multiplier to keep their legacy size
@@ -1857,7 +1908,9 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
                 if ((child as any).isMesh) {
                     const mesh = child as THREE.Mesh;
                     mesh.visible = cloudsVisible;
-                    mesh.material = themedMat.current || ringMaterials.cloud;
+                    const isDigital = materialOverride === 'digital';
+                    const useThemed = materialOverride && !isDigital && cleanMat.current;
+                    mesh.material = useThemed ? (cleanMat.current as THREE.Material) : ringMaterials.cloud;
 
                     // 1. Morph expansion & Scale (Interactive Only)
                     if (!isStatic) {
@@ -1967,6 +2020,7 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
                     intensity={(values[1] > 50) ? (values[1] - 50) / 50 : 0}
                     radius={2.15}
                     speed={1.0}
+                    isStatic={isStatic}
                 />
 
                 {/* Wind appears when Forest slider < 50% - Removed per user request */}

@@ -553,25 +553,10 @@ export default function WorldQuiz() {
                                         
                                         <div className={styles.artifactCanvasWrapper}>
                                             <Suspense fallback={null}>
-                                                {isDigital ? (
-                                                    <div style={{ pointerEvents: 'none', width: '100%', height: '100%' }}>
-                                                        <Planet3D
-                                                            values={elementOptions.map(opt => elementValues[opt.id])}
-                                                            currentSection={4}
-                                                            tintColor={tintInfo.color}
-                                                            isStatic={true}
-                                                            planetScale={ARTIFACT_TRANSFORMS.digital.planetScale}
-                                                            cloudScale={ARTIFACT_TRANSFORMS.digital.cloudScale}
-                                                            cometScale={ARTIFACT_TRANSFORMS.digital.cometScale}
-                                                            ringScale={ARTIFACT_TRANSFORMS.digital.ringScale}
-                                                        />
-                                                    </div>
-                                                ) : (
-                                                    <UnifiedArtifactRenderer
-                                                        values={elementOptions.map(opt => elementValues[opt.id])}
-                                                        materialOverride={matOverride || 'digital'}
-                                                    />
-                                                )}
+                                                <UnifiedArtifactRenderer
+                                                    values={elementOptions.map(opt => elementValues[opt.id])}
+                                                    materialOverride={matOverride || 'digital'}
+                                                />
                                             </Suspense>
                                         </div>
 

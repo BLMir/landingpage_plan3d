@@ -8,10 +8,10 @@ import { MeshStandardMaterial } from 'three';
 export const GLOBAL_POSITION_OFFSET: [number, number, number] = [0, 0, 0]; // Bulk shift for all 4 slots
 export const GLOBAL_SCALE_MULTIPLIER: number = 1.0; // Global master scale for everything
 export const ARTIFACT_TRANSFORMS: Record<string, { position: [number, number, number], rotation: [number, number, number], overallScale: number, planetScale: number, cloudScale: number, cometScale: number, ringScale: number }> = {
-    digital: { position: [0, 0, 0], rotation: [-9, 70, 0], overallScale: 1.0, planetScale: 1.0, cloudScale: 1.0, cometScale: 0.95, ringScale: 1.0 },
+    digital: { position: [0, 0, 0], rotation: [-9, 70, 0], overallScale: 1.0, planetScale: 1.0, cloudScale: 1.0, cometScale: 1.0, ringScale: 1.0 },
     lamp: { position: [0, -2, 0], rotation: [-9, 70, 0], overallScale: 1.0, planetScale: 1.0, cloudScale: 1.0, cometScale: 1.0, ringScale: 1.0 },
-    necklace: { position: [-0.75, -3, 0], rotation: [-9, 70, 0], overallScale: 0.9, planetScale: 1.0, cloudScale: 1.0, cometScale: 1.0, ringScale: 1.0 },
-    bracelet: { position: [0, -4.1, 0], rotation: [-9, 70, 0], overallScale: 0.7, planetScale: 1.0, cloudScale: 1.0, cometScale: 1.0, ringScale: 1.0 }
+    necklace: { position: [-0.75, -3, 0], rotation: [-9, 70, 0], overallScale: 0.9, planetScale: 1.0, cloudScale: 1.0, cometScale: 1.05, ringScale: 1.0 },
+    bracelet: { position: [0, -4.1, 0], rotation: [-9, 70, 0], overallScale: 0.7, planetScale: 1.0, cloudScale: 1.0, cometScale: 1.15, ringScale: 1.0 }
 };
 
 // --- SHADER HELPERS (Wow Procedural Patterns) ---
@@ -105,34 +105,16 @@ ${getGrowthAlphaLogic}
 `;
 
 const sharedFragLogic = `
-vec3 bC = diffuseColor.rgb;
-float s1 = uSliders[0], s2 = uSliders[1];
-float iV = (s1 < 0.5) ? (0.5 - s1) * 2.0 : 0.0, iO = (s1 > 0.5) ? (s1 - 0.5) * 2.0 : 0.0, iD = (s2 < 0.5) ? (0.5 - s2) * 2.0 : 0.0, iF = (s2 > 0.5) ? (s2 - 0.5) * 2.0 : 0.0;
-vec3 p1 = vec3(0.0, 1.0, 0.0), p2 = vec3(0.8, -0.5, 0.3);
-float aV = getGrowthAlpha_planet(vOriginalPos, p1, iV), aO = getGrowthAlpha_planet(vOriginalPos, p1, iO), aD = getGrowthAlpha_planet(vOriginalPos, p2, iD), aF = getGrowthAlpha_planet(vOriginalPos, p2, iF);
-vec3 mD = bC;
-if (aV > 0.05) {
-    float rN = snoise_planet(vOriginalPos * 10.0 + vec3(10.0));
-    vec3 rD = bC * 0.2, rB = bC * 0.5, fR = mix(rD, rB, rN * 0.5 + 0.5);
-    float riv = smoothstep(0.85, 0.98, 1.0 - abs(snoise_planet(vOriginalPos * 0.3 + vec3(0.0, uTime * 0.1, 0.0))));
-    mD = mix(mD, mix(fR, bC * 2.5, riv), aV);
-}
-if (aO > 0.001) {
-    vec3 oC = bC * 0.8; if (uHasOceanMap > 0.5) oC = mix(oC, oC * texture2D(uOceanMap, vCustomUv).rgb, 0.85);
-    float wave = smoothstep(0.88, 0.99, 1.0 - abs(snoise_planet(vOriginalPos * 0.25 + vec3(0.0, uTime * 0.12, 0.0))));
-    mD = mix(mD, mix(oC, bC * 1.5, wave * 0.4), aO);
-}
-if (aD > 0.001) {
-    vec3 dC = bC; if (uHasDesertMap > 0.5) dC = mix(dC, dC * texture2D(uDesertMap, vCustomUv).rgb, 0.85);
-    dC += abs(snoise_planet(vOriginalPos * 6.0)) * 0.03;
-    mD = mix(mD, dC, aD);
-}
-if (aF > 0.001 || vIsForest > 0.5) {
-    if (vIsForest > 0.5 && aF < 0.01) discard;
-    float gN = snoise_planet(vOriginalPos * 12.0) * 0.5 + 0.5;
-    mD = mix(mD, bC * 0.4, aF * (0.5 + 0.5 * gN));
-}
-diffuseColor.rgb = mD;
+float s2 = uSliders[1];
+float iF = (s2 > 0.5) ? (s2 - 0.5) * 2.0 : 0.0;
+vec3 p2 = vec3(0.8, -0.5, 0.3);
+float aF = getGrowthAlpha_planet(vOriginalPos, p2, iF);
+if (vIsForest > 0.5 && aF < 0.01) discard;
+
+#ifdef USE_COLOR
+    // Override the vertex colors multiplied by <color_fragment> to enforce pure material properties!
+    diffuseColor.rgb = diffuse;
+#endif
 `;
 
 export const applyArtifactShader = (shader: any, uniforms: any) => {
@@ -152,7 +134,7 @@ export const applyArtifactShader = (shader: any, uniforms: any) => {
         float aV = getGrowthAlpha_planet(transformed, p1, iV), aO = getGrowthAlpha_planet(transformed, p1, iO), aD = getGrowthAlpha_planet(transformed, p2, iD), aF = getGrowthAlpha_planet(transformed, p2, iF);
         float maskD = aD*(1.0-aF), maskO = aO*(1.0-aV)*(1.0-aD)*(1.0-aF), maskV = aV*(1.0-aO)*(1.0-aD)*(1.0-aF);
         float mI[8]; for (int i=0; i<8; i++) mI[i] = 0.0;
-        for (int i=0; i<8; i++) { int t = uIndices[i]; if (t==0) mI[i]=maskD; else if (t==1) mI[i]=maskO; else if (t==2) mI[i]=maskV; else if (t==3) mI[i]=aF; }
+        for (int i=0; i<8; i++) { int t = uIndices[i]; if (t==0) mI[i]=maskD*1.8; else if (t==1) mI[i]=maskO*1.8; else if (t==2) mI[i]=maskV*1.8; else if (t==3) mI[i]=aF*1.8; }
         ${THREE.ShaderChunk['morphtarget_vertex'].replace(/morphTargetInfluences/g, 'mI')}
         vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
     `);
@@ -161,10 +143,10 @@ export const applyArtifactShader = (shader: any, uniforms: any) => {
 
 // --- MATERIAL REGISTRY (EXPOSED) ---
 export const ARTIFACT_MATERIALS = {
-    lamp: new MeshStandardMaterial({ color: '#ffffff', roughness: 0.1, metalness: 0.3 }),
-    necklace: new MeshStandardMaterial({ color: '#4a4a4b', roughness: 0.15, metalness: 0.95 }),
-    bracelet: new MeshStandardMaterial({ color: '#3d2b1f', roughness: 0.7, metalness: 0.0 }),
-    digital: new MeshStandardMaterial({ color: '#1a1a1c', roughness: 0.9, metalness: 0.0 })
+    lamp: new THREE.MeshPhysicalMaterial({ color: '#f5f5f5', roughness: 0.1, metalness: 0.1, transmission: 0.95, transparent: true, opacity: 1.0, ior: 1.5, thickness: 2.0 }), // Semitranslucent
+    necklace: new THREE.MeshStandardMaterial({ color: '#4a4a4b', roughness: 0.15, metalness: 0.95 }), // Dark silver
+    bracelet: new THREE.MeshStandardMaterial({ color: '#3d2b1f', roughness: 0.7, metalness: 0.0 }), // Dark wood
+    digital: new THREE.MeshStandardMaterial({ color: '#1a1a1c', roughness: 0.9, metalness: 0.0 })
 };
 
 interface ArtifactProps { values: number[]; materialOverride: string; }
