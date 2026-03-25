@@ -9,8 +9,11 @@ interface Planet3DProps {
     currentSection: number;
     tintColor?: string;
     tintOpacity?: number;
-    materialOverride?: 'lamp' | 'silver' | 'darkWood';
     isStatic?: boolean;
+    planetScale?: number;
+    cloudScale?: number;
+    cometScale?: number;
+    ringScale?: number;
 }
 
 export interface Planet3DHandle {
@@ -48,12 +51,15 @@ const Planet3DInner = forwardRef<Planet3DHandle, Planet3DProps>((props, ref) => 
                             currentSection={props.currentSection}
                             tintColor={props.tintColor}
                             tintOpacity={props.tintOpacity}
-                            materialOverride={props.materialOverride}
                             isStatic={props.isStatic}
+                            planetScale={props.planetScale}
+                            cloudScale={props.cloudScale}
+                            cometScale={props.cometScale}
+                            ringScale={props.ringScale}
                         />
                     </Suspense>
                 </scene>
-                <OrbitControls enableZoom={false} enablePan={false} />
+                {!props.isStatic && <OrbitControls enableZoom={false} enablePan={false} />}
             </Canvas>
         </div>
     );
