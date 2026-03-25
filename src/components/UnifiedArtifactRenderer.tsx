@@ -10,8 +10,8 @@ export const GLOBAL_SCALE_MULTIPLIER: number = 1.0; // Global master scale for e
 export const ARTIFACT_TRANSFORMS: Record<string, { position: [number, number, number], rotation: [number, number, number], overallScale: number, planetScale: number, cloudScale: number, cometScale: number, ringScale: number }> = {
     digital: { position: [0, 0, 0], rotation: [-9, 70, 0], overallScale: 1.0, planetScale: 1.0, cloudScale: 1.0, cometScale: 1.0, ringScale: 1.0 },
     lamp: { position: [0, -2, 0], rotation: [-9, 70, 0], overallScale: 1.0, planetScale: 1.0, cloudScale: 1.0, cometScale: 1.0, ringScale: 1.0 },
-    necklace: { position: [-0.75, -3, 0], rotation: [-9, 70, 0], overallScale: 0.9, planetScale: 1.0, cloudScale: 1.0, cometScale: 1.05, ringScale: 1.0 },
-    bracelet: { position: [0, -4.1, 0], rotation: [-9, 70, 0], overallScale: 0.7, planetScale: 1.0, cloudScale: 1.0, cometScale: 1.15, ringScale: 1.0 }
+    necklace: { position: [-0.75, -3, 0], rotation: [-9, 70, 0], overallScale: 0.9, planetScale: 1.0, cloudScale: 1.05, cometScale: 1.05, ringScale: 1.05 },
+    bracelet: { position: [0, -4.1, 0], rotation: [-9, 70, 0], overallScale: 0.7, planetScale: 1.0, cloudScale: 1.2, cometScale: 1.15, ringScale: 1.2 }
 };
 
 // --- SHADER HELPERS (Wow Procedural Patterns) ---
@@ -127,7 +127,9 @@ export const applyArtifactShader = (shader: any, uniforms: any) => {
     shader.uniforms.uIndices = uniforms.uIndices;
     shader.uniforms.uIsForest = { value: 0.0 };
     shader.uniforms.uIsRing = { value: 0.0 };
-    shader.vertexShader = shader.vertexShader.replace('#include <common>', `#include <common>\n${sharedVertPars}`).replace('#include <begin_vertex>', `#include <begin_vertex>\nvCustomUv = uv; vOriginalPos = position; vIsForest = uIsForest; vIsRing = uIsRing;
+    shader.vertexShader = shader.vertexShader.replace('#include <common>', `#include <common>\n${sharedVertPars}`).replace('#include <begin_vertex>', `#include <begin_vertex>\nvCustomUv = uv; vOriginalPos = position; vIsForest = uIsForest; vIsRing = uIsRing;`);
+
+    const customMorphLogic = `
         float s1 = uSliders[0], s2 = uSliders[1];
         float iV = (s1 < 0.5) ? (0.5 - s1) * 2.0 : 0.0, iO = (s1 > 0.5) ? (s1 - 0.5) * 2.0 : 0.0, iD = (s2 < 0.5) ? (0.5 - s2) * 2.0 : 0.0, iF = (s2 > 0.5) ? (s2 - 0.5) * 2.0 : 0.0;
         vec3 p1 = vec3(0.0, 1.0, 0.0), p2 = vec3(0.8, -0.5, 0.3);
@@ -137,8 +139,20 @@ export const applyArtifactShader = (shader: any, uniforms: any) => {
         for (int i=0; i<8; i++) { int t = uIndices[i]; if (t==0) mI[i]=maskD*1.8; else if (t==1) mI[i]=maskO*1.8; else if (t==2) mI[i]=maskV*1.8; else if (t==3) mI[i]=aF*1.8; }
         ${THREE.ShaderChunk['morphtarget_vertex'].replace(/morphTargetInfluences/g, 'mI')}
         vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
-    `);
-    shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>\n${sharedFragPars}`).replace('#include <color_fragment>', `#include <color_fragment>\n{${sharedFragLogic}}`);
+    `;
+
+    shader.vertexShader = shader.vertexShader.replace('#include <morphtarget_vertex>', customMorphLogic);
+
+    const normalLogic = `
+#include <normal_fragment_begin>
+normal = normalize(cross(dFdx(vWorldPos), dFdy(vWorldPos)));
+nonPerturbedNormal = normal;
+    `;
+    
+    shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', `#include <common>\n${sharedFragPars}`)
+        .replace('#include <normal_fragment_begin>', normalLogic)
+        .replace('#include <color_fragment>', `#include <color_fragment>\n{${sharedFragLogic}}`);
 };
 
 // --- MATERIAL REGISTRY (EXPOSED) ---

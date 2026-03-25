@@ -1769,13 +1769,11 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
                 else if (lowerName.includes('ring_3')) activeMorph = r3_val;
                 // 2. Morph expansion & Scale (Interactive Only)
                 // Total Scale = Root(1.0) * Mesh(100 * ringScale)
-                if (!isStatic) {
-                    mesh.scale.set(ringScale, ringScale, ringScale);
+                mesh.scale.set(ringScale, ringScale, ringScale);
 
-                    if (mesh.morphTargetInfluences) {
-                        for (let i = 0; i < mesh.morphTargetInfluences.length; i++) {
-                            mesh.morphTargetInfluences[i] = activeMorph;
-                        }
+                if (mesh.morphTargetInfluences) {
+                    for (let i = 0; i < mesh.morphTargetInfluences.length; i++) {
+                        mesh.morphTargetInfluences[i] = activeMorph;
                     }
                 }
             });
@@ -1912,10 +1910,8 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
                     const useThemed = materialOverride && !isDigital && cleanMat.current;
                     mesh.material = useThemed ? (cleanMat.current as THREE.Material) : ringMaterials.cloud;
 
-                    // 1. Morph expansion & Scale (Interactive Only)
-                    if (!isStatic) {
-                        mesh.scale.set(cloudScale, cloudScale, cloudScale);
-                    }
+                    // 1. Morph expansion & Scale
+                    mesh.scale.set(cloudScale, cloudScale, cloudScale);
 
                     if (mesh.material instanceof THREE.ShaderMaterial) {
                         mesh.material.uniforms.uTime.value = time;
@@ -1934,7 +1930,7 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
                         targetVal = Math.min(1.0, Math.max(0.0, (p - start) / (end - start)));
                     }
 
-                    if (mesh.morphTargetInfluences && mesh.morphTargetDictionary && !isStatic) {
+                    if (mesh.morphTargetInfluences && mesh.morphTargetDictionary) {
                         const idx = mesh.morphTargetDictionary['high'];
                         if (idx !== undefined) {
                             mesh.morphTargetInfluences[idx] = targetVal;
