@@ -649,9 +649,9 @@
 .sliderTrackLine {
     position: absolute;
     width: 100%;
-    height: 66px;
+    height: 32px;
     background: url('/bg_web_elements/bg_slider.png') no-repeat center center;
-    background-size: 100% 200%;
+    background-size: 100% 100%;
     /* Increased height */
     top: 50%;
     transform: translateY(-50%);
@@ -2197,6 +2197,11 @@
         gap: 0.8rem !important;
         padding-bottom: 1.5rem !important;
         margin-top: 0 !important;
+    }
+
+    .navControlBtn {
+        padding: 0.7rem 1.8rem !important;
+        font-size: 1.15rem !important;
     }
 
     .container {
