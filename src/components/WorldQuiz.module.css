@@ -649,9 +649,9 @@
 .sliderTrackLine {
     position: absolute;
     width: 100%;
-    height: 18px;
+    height: 32px;
     background: url('/bg_web_elements/bg_slider.png') no-repeat center center;
-    background-size: 100% 115%;
+    background-size: 100% 100%;
     /* Increased height */
     top: 50%;
     transform: translateY(-50%);
@@ -1609,7 +1609,7 @@
 
     /* Fix Slider Track Stretching */
     .sliderTrackLine {
-        height: 12px !important;
+        height: 24px !important;
         /* Thinner */
         background-size: 100% 100% !important;
         /* Don't stretch height excessively */
