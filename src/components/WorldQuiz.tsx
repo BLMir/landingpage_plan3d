@@ -34,11 +34,13 @@ type GlowColors = {
 };
 
 const elementColors: Record<string, GlowColors> = {
-    'Q1': { low: '#FF4444', high: '#3B82F6' }, // Redish -> Blue
-    'Q2': { low: '#B45309', high: '#16A34A' }, // Ocre -> Green
-    'Q3': { low: '#A855F7', high: '#FACC15' }, // Purple -> Yellow
-    'Q4': { low: '#3B82F6', high: '#22D3EE' }, // Blue -> Cyan
-    'Q5': { low: '#FDE047', high: '#FFFFFF' }, // Yellow -> White
+    'Ocean': { low: '#3B82F6', high: '#3B82F6' },   // Blue
+    'Volcano': { low: '#FF4444', high: '#FF4444' }, // Red
+    'Desert': { low: '#B45309', high: '#B45309' },  // Ocre
+    'Forest': { low: '#16A34A', high: '#16A34A' },  // Green
+    'Q3': { low: '#A855F7', high: '#FACC15' },      // Purple -> Yellow
+    'Q4': { low: '#3B82F6', high: '#22D3EE' },      // Blue -> Cyan
+    'Q5': { low: '#FDE047', high: '#FFFFFF' },      // Yellow -> White
 };
 
 const interpolateColor = (color1: string, color2: string, factor: number) => {
@@ -63,8 +65,10 @@ const interpolateColor = (color1: string, color2: string, factor: number) => {
 };
 
 const elementOptions = [
-    { id: 'Q1', title: 'Volcanos & Oceans', icon: '/1_Quiz Planet Images/VolcanOcean.png', low: '/1_Quiz Planet Images/each_element/volcanos.png', high: '/1_Quiz Planet Images/each_element/oceans.png', folder: '1_How empathetic are you_', lowPrefix: '1_low', highPrefix: '1_high' },
-    { id: 'Q2', title: 'Deserts & Forests', icon: '/1_Quiz Planet Images/desertForest.png', low: '/1_Quiz Planet Images/each_element/desert.png', high: '/1_Quiz Planet Images/each_element/forest.png', folder: '2_How sociable are you_', lowPrefix: '2_low', highPrefix: '2_high' },
+    { id: 'Desert', title: 'Desert Expansion', icon: '/1_Quiz Planet Images/each_element/desert.png', low: '/1_Quiz Planet Images/each_element/empty.png', high: '/1_Quiz Planet Images/each_element/desert.png', folder: '2_How introverted are you_', lowPrefix: '2_low', highPrefix: '2_high' },
+    { id: 'Volcano', title: 'Volcanic Activity', icon: '/1_Quiz Planet Images/each_element/volcanos.png', low: '/1_Quiz Planet Images/each_element/empty.png', high: '/1_Quiz Planet Images/each_element/volcanos.png', folder: '1_How energetic are you_', lowPrefix: '1_low', highPrefix: '1_high' },
+    { id: 'Ocean', title: 'Ocean Depth', icon: '/1_Quiz Planet Images/each_element/oceans.png', low: '/1_Quiz Planet Images/each_element/empty.png', high: '/1_Quiz Planet Images/each_element/oceans.png', folder: '1_How empathetic are you_', lowPrefix: '1_low', highPrefix: '1_high' },
+    { id: 'Forest', title: 'Forest Growth', icon: '/1_Quiz Planet Images/each_element/forest.png', low: '/1_Quiz Planet Images/each_element/empty.png', high: '/1_Quiz Planet Images/each_element/forest.png', folder: '2_How sociable are you_', lowPrefix: '2_low', highPrefix: '2_high' },
     { id: 'Q3', title: 'Rings of Asteroids', icon: '/1_Quiz Planet Images/Rings.png', low: '/1_Quiz Planet Images/each_element/empty.png', high: '/1_Quiz Planet Images/each_element/rings.png', folder: '3_How persistent are you_', lowPrefix: '3_low', highPrefix: '3_high' },
     { id: 'Q4', title: 'Fall stars & Comets', icon: '/1_Quiz Planet Images/Comets.png', low: '/1_Quiz Planet Images/each_element/comets_low.png', high: '/1_Quiz Planet Images/each_element/comets_high.png', folder: '4_How curious are you_', lowPrefix: '4_low', highPrefix: '4_high' },
     { id: 'Q5', title: 'Storms & Clear sky', icon: '/1_Quiz Planet Images/Clouds.png', low: '/1_Quiz Planet Images/each_element/clouds_low.png', high: '/1_Quiz Planet Images/each_element/clouds_high.png', folder: '5_How relaxed are you_', lowPrefix: '5_low', highPrefix: '5_high' },
@@ -99,7 +103,7 @@ export default function WorldQuiz() {
 
     // Quiz State
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-    const [sliderValue, setSliderValue] = useState(50);
+    const [sliderValue, setSliderValue] = useState(0);
     const [allAnswers, setAllAnswers] = useState<Record<string, number>>({}); 
 
     // UI State
@@ -132,7 +136,7 @@ export default function WorldQuiz() {
     );
     const [wishlisted, setWishlisted] = useState<Set<string>>(new Set(['artifact_1']));
     const [elementValues, setElementValues] = useState<Record<string, number>>({
-        'Q1': 50, 'Q2': 50, 'Q3': 50, 'Q4': 50, 'Q5': 50
+        'Ocean': 0, 'Volcano': 0, 'Desert': 0, 'Forest': 0, 'Q3': 50, 'Q4': 50, 'Q5': 50
     });
     const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
     const [orderedTraits, setOrderedTraits] = useState<string[]>([
@@ -306,29 +310,67 @@ export default function WorldQuiz() {
 
     const handleBackQuestion = () => {
         if (currentQuestionIndex === 0) return;
+        
+        // Save current answer before going back
+        const currentQuestion = personalityLanding[currentQuestionIndex];
+        setAllAnswers(prev => ({
+            ...prev,
+            [currentQuestion.id]: sliderValue
+        }));
+
         setIsQuestionTransitioning(true);
         setTimeout(() => {
-            setCurrentQuestionIndex(prev => prev - 1);
-            setSliderValue(50);
+            const prevIndex = currentQuestionIndex - 1;
+            const prevQuestion = personalityLanding[prevIndex];
+            setCurrentQuestionIndex(prevIndex);
+            
+            // Restore saved answer or use default
+            const savedValue = allAnswers[prevQuestion.id];
+            if (savedValue !== undefined) {
+                setSliderValue(savedValue);
+            } else {
+                const isPersonalitySplit = ['Ocean', 'Volcano', 'Desert', 'Forest'].includes(prevQuestion.elementId);
+                setSliderValue(isPersonalitySplit ? 0 : 50);
+            }
+            
             setIsQuestionTransitioning(false);
         }, 800);
     };
 
     const handleNextQuestion = () => {
-        setIsQuestionTransitioning(true);
-        setAllAnswers({ ...allAnswers, [currentQuestion.id]: sliderValue });
+        if (isQuestionTransitioning) return;
 
-        setTimeout(() => {
-            if (currentQuestionIndex < quizQuestions.length - 1) {
+        // Capture current answer
+        const currentQuestion = personalityLanding[currentQuestionIndex];
+        setAllAnswers(prev => ({
+            ...prev,
+            [currentQuestion.id]: sliderValue
+        }));
+
+        if (currentQuestionIndex < personalityLanding.length - 1) {
+            setIsQuestionTransitioning(true);
+            setIsTitleFading(true);
+            
+            setTimeout(() => {
                 const nextIndex = currentQuestionIndex + 1;
+                const nextQuestion = personalityLanding[nextIndex];
                 setCurrentQuestionIndex(nextIndex);
-                setSliderValue(50);
-                setShowIdleOverlay(false);
-            } else {
-                setView('artifact');
-            }
-            setIsQuestionTransitioning(false);
-        }, 800);
+                
+                // Restore saved answer or use default
+                const savedValue = allAnswers[nextQuestion.id];
+                if (savedValue !== undefined) {
+                    setSliderValue(savedValue);
+                } else {
+                    const isPersonalitySplit = ['Ocean', 'Volcano', 'Desert', 'Forest'].includes(nextQuestion.elementId);
+                    setSliderValue(isPersonalitySplit ? 0 : 50);
+                }
+                
+                setIsQuestionTransitioning(false);
+                setIsTitleFading(false);
+            }, 500);
+        } else {
+            setView('artifact');
+        }
     };
 
     const handleDownloadSTL = async (exportMode: 'standard' | 'hole' | 'ring' | 'ring_hole' | 'four_holes' | 'flat' = 'standard') => {

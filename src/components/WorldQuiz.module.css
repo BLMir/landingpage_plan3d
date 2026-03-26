@@ -649,9 +649,9 @@
 .sliderTrackLine {
     position: absolute;
     width: 100%;
-    height: 18px;
+    height: 32px;
     background: url('/bg_web_elements/bg_slider.png') no-repeat center center;
-    background-size: 100% 115%;
+    background-size: 100% 100%;
     /* Increased height */
     top: 50%;
     transform: translateY(-50%);
@@ -1609,7 +1609,7 @@
 
     /* Fix Slider Track Stretching */
     .sliderTrackLine {
-        height: 12px !important;
+        height: 24px !important;
         /* Thinner */
         background-size: 100% 100% !important;
         /* Don't stretch height excessively */
@@ -2164,12 +2164,48 @@
 
 @media (max-width: 600px) and (orientation: portrait) {
     .quizSection {
-        padding-top: 3rem;
+        padding-top: 1rem;
+    }
+
+    .topQuizLayer {
+        gap: 0.5rem !important;
+    }
+
+    .centerQuizLayer {
+        min-height: 200px !important;
+        /* Reduced from 300px */
+    }
+
+    .planetVisual {
+        width: 250px !important;
+        /* Reduced from 500px */
+        height: 250px !important;
+        /* Reduced from 500px */
+    }
+
+    .bottomQuizLayer {
+        gap: 0.5rem !important;
+        padding-bottom: 1rem !important;
+    }
+
+    .questionTitle {
+        font-size: 1.4rem !important;
+        margin-bottom: 0.5rem !important;
+    }
+
+    .quizNavigationButtons {
+        gap: 0.8rem !important;
+        padding-bottom: 1.5rem !important;
+        margin-top: 0 !important;
+    }
+
+    .navControlBtn {
+        padding: 0.7rem 1.8rem !important;
+        font-size: 1.15rem !important;
     }
 
     .container {
         padding-top: 0rem !important;
-        /* Removed padding */
         justify-content: flex-start !important;
         gap: 0.1rem !important;
     }
@@ -2636,7 +2672,7 @@
         grid-template-columns: 1fr;
         gap: 1rem;
     }
-    
+
     .artifactCard {
         aspect-ratio: auto;
         min-height: 400px;
