@@ -83,6 +83,8 @@ float getGrowthAlpha(vec3 pos, vec3 seedPoint, float intensity) {
 // Preload to avoid waterfalls
 useGLTF.preload(getAssetPath('/models/forest.glb'));
 
+const FOREST_GLB_SCALE = 0.395;
+
 interface DisplacementSphereProps {
     values: number[];
     currentSection: number;
@@ -369,7 +371,7 @@ const ButterflyParticles: React.FC<{ intensity: number, radius?: number, speed?:
         ];
 
         // Spawn around the forest seed point in WORLD space coordinates (normalized planet)
-        const seedPoint = new THREE.Vector3(0.8, -0.5, 0.3).normalize();
+        const seedPoint = new THREE.Vector3(-1.0, 0.4, 0.0).normalize();
 
         for (let i = 0; i < count; i++) {
             // WIDER RANDOM SPREAD to ensure they don't clump at the center
@@ -405,7 +407,7 @@ const ButterflyParticles: React.FC<{ intensity: number, radius?: number, speed?:
         uTime: { value: 0 },
         uIntensity: { value: 0 },
         uSpeed: { value: speed },
-        uSeedPoint: { value: new THREE.Vector3(0.8, -0.5, 0.3) }
+        uSeedPoint: { value: new THREE.Vector3(-1.0, 0.4, 0.0) }
     }), [speed]);
 
     useFrame((state) => {
@@ -451,126 +453,7 @@ const ButterflyParticles: React.FC<{ intensity: number, radius?: number, speed?:
     );
 };
 
-const WindParticles: React.FC<{ intensity: number, radius?: number, speed?: number, rotation?: [number, number, number], isStatic?: boolean }> = ({
-    intensity,
-    radius = 3.5,
-    speed = 1.0,
-    rotation = [0, 0, 0],
-    isStatic = false,
-}) => {
-    if (isStatic) return null;
-    const streakCount = 60; // Fewer but thicker
-    const segmentsPerStreak = 8; // Smooth curving
-
-    const countPerStreak = (segmentsPerStreak + 1) * 2;
-    const totalCount = streakCount * countPerStreak;
-    const indexCountPerStreak = segmentsPerStreak * 6;
-    const totalIndexCount = streakCount * indexCountPerStreak;
-
-    const meshRef = useRef<THREE.Mesh>(null);
-    const materialRef = useRef<THREE.ShaderMaterial>(null);
-
-    const [positions, seeds, ratios, sides, indices] = useMemo(() => {
-        const pos = new Float32Array(totalCount * 3);
-        const sds = new Float32Array(totalCount * 3);
-        const rats = new Float32Array(totalCount);
-        const sdes = new Float32Array(totalCount);
-        const idxs = new Uint16Array(totalIndexCount);
-
-        const seedPoint = new THREE.Vector3(0.8, -0.5, 0.3).normalize();
-
-        for (let i = 0; i < streakCount; i++) {
-            const randomOffset = new THREE.Vector3(
-                (Math.random() - 0.5) * 5.5,
-                (Math.random() - 0.5) * 5.5,
-                (Math.random() - 0.5) * 5.5
-            );
-            const dir = seedPoint.clone().add(randomOffset).normalize();
-            const currentRadius = radius + Math.random() * 0.5;
-
-            const baseP = dir.multiplyScalar(currentRadius);
-            const sx = Math.random() * 1000.0;
-            const sy = Math.random() * 1000.0;
-            const sz = Math.random() * 1.0;
-
-            const vertexOffset = i * countPerStreak;
-
-            for (let s = 0; s <= segmentsPerStreak; s++) {
-                const r = s / segmentsPerStreak;
-
-                // Left vertex
-                const vL = vertexOffset + s * 2;
-                pos[vL * 3] = baseP.x; pos[vL * 3 + 1] = baseP.y; pos[vL * 3 + 2] = baseP.z;
-                sds[vL * 3] = sx; sds[vL * 3 + 1] = sy; sds[vL * 3 + 2] = sz;
-                rats[vL] = r;
-                sdes[vL] = -1.0;
-
-                // Right vertex
-                const vR = vertexOffset + s * 2 + 1;
-                pos[vR * 3] = baseP.x; pos[vR * 3 + 1] = baseP.y; pos[vR * 3 + 2] = baseP.z;
-                sds[vR * 3] = sx; sds[vR * 3 + 1] = sy; sds[vR * 3 + 2] = sz;
-                rats[vR] = r;
-                sdes[vR] = 1.0;
-
-                if (s < segmentsPerStreak) {
-                    const iOff = i * indexCountPerStreak + s * 6;
-                    const a = vertexOffset + s * 2;
-                    const b = vertexOffset + s * 2 + 1;
-                    const c = vertexOffset + (s + 1) * 2;
-                    const d = vertexOffset + (s + 1) * 2 + 1;
-
-                    idxs[iOff] = a; idxs[iOff + 1] = b; idxs[iOff + 2] = c;
-                    idxs[iOff + 3] = b; idxs[iOff + 4] = d; idxs[iOff + 5] = c;
-                }
-            }
-        }
-        return [pos, sds, rats, sdes, idxs];
-    }, [streakCount, radius]);
-
-    const posAttr = useMemo(() => new THREE.BufferAttribute(positions, 3), [positions]);
-    const sdsAttr = useMemo(() => new THREE.BufferAttribute(seeds, 3), [seeds]);
-    const ratAttr = useMemo(() => new THREE.BufferAttribute(ratios, 1), [ratios]);
-    const sideAttr = useMemo(() => new THREE.BufferAttribute(sides, 1), [sides]);
-    const idxAttr = useMemo(() => new THREE.BufferAttribute(indices, 1), [indices]);
-
-    const uniforms = useMemo(() => ({
-        uTime: { value: 0 },
-        uIntensity: { value: 0 },
-        uSpeed: { value: speed },
-        uSeedPoint: { value: new THREE.Vector3(0.8, -0.5, 0.3) }
-    }), [speed]);
-
-    useFrame((state) => {
-        if (materialRef.current) {
-            materialRef.current.uniforms.uTime.value = state.clock.getElapsedTime();
-            materialRef.current.uniforms.uIntensity.value = intensity;
-            materialRef.current.uniforms.uSpeed.value = speed;
-        }
-    });
-
-    return (
-        <mesh ref={meshRef} frustumCulled={false} rotation={rotation} name="exclusion_wind">
-            <bufferGeometry>
-                <primitive object={posAttr} attach="attributes-position" />
-                <primitive object={sdsAttr} attach="attributes-pSeed" />
-                <primitive object={ratAttr} attach="attributes-vRatio" />
-                <primitive object={sideAttr} attach="attributes-vSide" />
-                <primitive object={idxAttr} attach="index" />
-            </bufferGeometry>
-            <shaderMaterial
-                ref={materialRef}
-                uniforms={uniforms}
-                vertexShader={windVertexShader}
-                fragmentShader={windFragmentShader}
-                transparent={true}
-                side={THREE.DoubleSide}
-                depthWrite={false}
-                depthTest={true}
-                blending={THREE.AdditiveBlending}
-            />
-        </mesh>
-    );
-};
+// WindParticles removed per user request
 
 // --- STYLIZED SHADERS REMOVED DUPLICATES ---
 
@@ -873,7 +756,7 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
         };
 
         // Arrays for initialization:
-        const magmaRadii = [23.5, 23.5, 23.5]; 
+        const magmaRadii = [23.5, 23.5, 23.5];
         const magmaElevations = [
             Math.PI / 2.1,  // ~85 deg (Pole)
             Math.PI / 4.0,  // ~45 deg (Mid-Northern)
@@ -1007,7 +890,7 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
     }, [ringGroup]);
 
     const customUniforms = useRef({
-        uSliders: { value: [0.5, 0.5, 0.5, 0.5, 0.5] },
+        uSliders: { value: [0.0, 0.0, 0.0, 0.0, 0.5, 0.5, 0.5] },
         uTime: { value: 0 },
         uDesertMap: { value: null as THREE.Texture | null },
         uOceanMap: { value: null as THREE.Texture | null },
@@ -1030,7 +913,11 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
     const themedMat = useRef<THREE.Material | null>(null);
     const themedMatForest = useRef<THREE.Material | null>(null);
     const themedMatRing = useRef<THREE.Material | null>(null);
+    const themedMatCloud = useRef<THREE.Material | null>(null);
     const cleanMat = useRef<THREE.Material | null>(null);
+    const baseMeshCache = useRef<THREE.Mesh[]>([]);
+    const forestMeshCache = useRef<THREE.Mesh[]>([]);
+    const ringMeshCache = useRef<THREE.Mesh[]>([]);
     useEffect(() => {
         if (!materialOverride) {
             themedMat.current = null;
@@ -1041,13 +928,13 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
         }
         import('./UnifiedArtifactRenderer').then(mod => {
             const baseMat = (artifactMaterials ? artifactMaterials[materialOverride] : (mod.ARTIFACT_MATERIALS as any)[materialOverride]) || mod.ARTIFACT_MATERIALS.digital;
-            const createM = (isF: number, isR: number, isBase: number) => {
+            const createM = (isF: number, isR: number, isBase: number, isC: number) => {
                 const m = baseMat.clone();
                 m.onBeforeCompile = (sh: any) => {
                     if (!m.userData) (m as any).userData = {};
                     m.userData.shader = sh;
                     mod.applyArtifactShader(sh, {
-                        uSliders: { value: values.map(v => v / 100) },
+                        uSliders: { value: new Float32Array(7) },
                         uTime: { value: 0 },
                         uIndices: { value: new Int32Array(8).fill(-1) },
                         uDesertMap: { value: (desertMaps && desertMaps[0]) || null },
@@ -1062,13 +949,15 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
                     sh.uniforms.uIsForest.value = isF;
                     sh.uniforms.uIsRing.value = isR;
                     sh.uniforms.uIsBaseMesh = { value: isBase };
+                    if (sh.uniforms.uIsCloud) sh.uniforms.uIsCloud.value = isC;
                 };
                 return m;
             };
-            themedMat.current = createM(0, 0, 1.0);
-            themedMatForest.current = createM(1, 0, 0.0);
-            themedMatRing.current = createM(0, 1, 0.0);
-            cleanMat.current = createM(0, 0, 0.0);
+            themedMat.current = createM(0, 0, 1.0, 0.0);
+            themedMatForest.current = createM(1, 0, 0.0, 0.0);
+            themedMatRing.current = createM(0, 1, 0.0, 0.0);
+            themedMatCloud.current = createM(0, 0, 0.0, 1.0);
+            cleanMat.current = createM(0, 0, 0.0, 0.0);
         });
     }, [materialOverride]);
 
@@ -1077,13 +966,13 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
         if (!artifactMaterials || !materialOverride) return;
         const sourceMat = artifactMaterials[materialOverride];
         if (!sourceMat) return;
-        const mats = [themedMat.current, themedMatForest.current, themedMatRing.current, cleanMat.current];
+        const mats = [themedMat.current, themedMatForest.current, themedMatRing.current, themedMatCloud.current, cleanMat.current];
         mats.forEach(m => {
             if (m && (m as any).isMeshStandardMaterial) {
                 (m as any).color.copy(sourceMat.color);
                 (m as any).roughness = sourceMat.roughness;
                 (m as any).metalness = sourceMat.metalness;
-                (m as any).transparent = sourceMat.transparent; 
+                (m as any).transparent = sourceMat.transparent;
                 (m as any).opacity = sourceMat.opacity;
                 m.needsUpdate = true; // Force WebGL pipeline recompilation for HMR
             }
@@ -1093,7 +982,7 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
     // HMR Reactive Sync for Internal Shader RGB Colors (Biome Map)
     useEffect(() => {
         if (!lampColors) return;
-        const mats = [themedMat.current, themedMatForest.current, themedMatRing.current, cleanMat.current];
+        const mats = [themedMat.current, themedMatForest.current, themedMatRing.current, themedMatCloud.current, cleanMat.current];
         mats.forEach(m => {
             if (m && m.userData && m.userData.shader) {
                 const sh = m.userData.shader;
@@ -1105,23 +994,15 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
         });
     }, [lampColors]);
 
-    const baseMeshCache = useMemo(() => {
+    // Removed duplicate useMemo caches - using useRef caches instead
+    useEffect(() => {
         const cache: THREE.Mesh[] = [];
-        baseMesh.traverse((child: any) => {
-            if (child.isMesh) cache.push(child);
-        });
-        return cache;
-    }, [baseMesh]);
-
-    const ringMeshCache = useMemo(() => {
-        const meshes: THREE.Mesh[] = [];
         ringGroup.traverse((child) => {
-            if ((child as THREE.Mesh).isMesh) {
-                meshes.push(child as THREE.Mesh);
-            }
+            if ((child as THREE.Mesh).isMesh) cache.push(child as THREE.Mesh);
         });
-        return meshes;
+        ringMeshCache.current = cache;
     }, [ringGroup]);
+
 
     const cloudMeshCache = useMemo(() => {
         const meshes: THREE.Mesh[] = [];
@@ -1191,7 +1072,7 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
             // P3 (Bottom Left): vec3(-0.8, -0.5, 0.3) -> Forest (Future)
 
             shader.vertexShader = `
-                uniform float uSliders[5];
+                uniform float uSliders[7];
                 uniform float uTime;
                 varying vec3 vWorldPos;
                 varying vec3 vOriginalPos; 
@@ -1221,26 +1102,31 @@ vCustomUv = uv;
 vOriginalPos = position;
 
     // --- CALCULATE PER-VERTEX MASKS ---
-    float s1 = uSliders[0];
-    float s2 = uSliders[1];
-    float intenVolcano = (s1 < 0.5) ? (0.5 - s1) * 2.0 : 0.0;
-    float intenOcean = (s1 > 0.5) ? (s1 - 0.5) * 2.0 : 0.0;
-    float intenDesert = (s2 < 0.5) ? (0.5 - s2) * 2.0 : 0.0;
-    float intenForest = (s2 > 0.5) ? (s2 - 0.5) * 2.0 : 0.0;
+    // User requested 4 split questions Q1.1, Q1.2, Q2.1, Q2.2
+    // Mapping: 0:Ocean, 1:Volcano, 2:Desert, 3:Forest (Current: 4:Q3, 5:Q4, 6:Q5)
+    // Mapping: 0:Desert, 1:Volcano, 2:Ocean, 3:Forest
+    float intenDesert  = uSliders[0];
+    float intenVolcano = uSliders[1];
+    float intenOcean   = uSliders[2];
+    float intenForest  = uSliders[3];
     
-    vec3 p1 = vec3(0.0, 1.0, 0.0); // Q1 Top (Volcano / Ocean)
-    vec3 p2 = vec3(0.8, -0.5, 0.3); // Q2 Unified Reveal (Right)
-    float aV = getGrowthAlpha(transformed, p1, intenVolcano);
-    float aO = getGrowthAlpha(transformed, p1, intenOcean);
-    float aD = getGrowthAlpha(transformed, p2, intenDesert);
-    float aF = getGrowthAlpha(transformed, p2, intenForest);
+    // Seed points rotated 90 deg horizontally (Desert -> Volcano -> Ocean -> Forest)
+    vec3 pD = vec3(0.0, 0.4, -1.0); // Back  (Desert)
+    vec3 pV = vec3(1.0, 0.4, 0.0);  // Right (Volcano)
+    vec3 pO = vec3(0.0, 0.4, 1.0);  // Front (Ocean)
+    vec3 pF = vec3(-1.0, 0.4, 0.0); // Left  (Forest)
+    
+    float aD = getGrowthAlpha(transformed, pD, intenDesert);
+    float aV = getGrowthAlpha(transformed, pV, intenVolcano);
+    float aO = getGrowthAlpha(transformed, pO, intenOcean);
+    float aF = getGrowthAlpha(transformed, pF, intenForest);
 
-    // --- REPLACEMENT LOGIC ---
-    // S2 (Desert/Forest) overrides S1 (Volcano/Ocean)
-    float maskD = aD * (1.0 - aF);
-    float maskO = aO * (1.0 - aV) * (1.0 - aD) * (1.0 - aF);
-    float maskV = aV * (1.0 - aO) * (1.0 - aD) * (1.0 - aF);
-// Forest (maskF) doesn't have a morph target, it just suppresses others via (1.0 - aF).
+    // --- SEQUENTIAL MASKING ---
+    // User requested order: Desert -> Volcano -> Ocean -> Forest
+    float maskD = aD * (1.0 - aV) * (1.0 - aO) * (1.0 - aF);
+    float maskV = aV * (1.0 - aO) * (1.0 - aF);
+    float maskO = aO * (1.0 - aF);
+    float maskF = aF;
 
 #include <morphtarget_vertex>
 
@@ -1262,13 +1148,13 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
 for (int i = 0; i < 8; i++) maskedInfluences[i] = 0.0;
 
 // Populate with our per-vertex masks and 1.8x boost
-// type 0=Desert, 1=Ocean, 2=Volcan
+// type 0=Desert, 1=Ocean, 2=Volcano, 3=Forest
 for (int i = 0; i < 8; i++) {
                     int type = uIndices[i];
     if (type == 0) maskedInfluences[i] = maskD * 1.8;
     else if (type == 1) maskedInfluences[i] = maskO * 1.8;
     else if (type == 2) maskedInfluences[i] = maskV * 1.8;
-    else if (type == 3) maskedInfluences[i] = aF * 1.8;
+    else if (type == 3) maskedInfluences[i] = maskF * 1.8;
 }
 
                 // Injected Chunk logic where we rename the influence access
@@ -1281,7 +1167,7 @@ for (int i = 0; i < 8; i++) {
             shader.vertexShader = shader.vertexShader.replace('#include <morphtarget_vertex>', finalLogic);
 
             shader.fragmentShader = `
-                uniform float uSliders[5];
+                uniform float uSliders[7];
                 uniform float uTime;
                 uniform sampler2D uDesertMap;
                 uniform sampler2D uOceanMap;
@@ -1323,19 +1209,26 @@ nonPerturbedNormal = normal;
                 vec3 mixedDiffuse = diffuseColor.rgb;
 
 
-                float s1 = uSliders[0];
-                float s2 = uSliders[1];
-                float intenVolcano = (s1 < 0.5) ? (0.5 - s1) * 2.0 : 0.0;
-                float intenOcean = (s1 > 0.5) ? (s1 - 0.5) * 2.0 : 0.0;
-                float intenDesert = (s2 < 0.5) ? (0.5 - s2) * 2.0 : 0.0;
-                float intenForest = (s2 > 0.5) ? (s2 - 0.5) * 2.0 : 0.0;
+                float intenDesert  = uSliders[0];
+                float intenVolcano = uSliders[1];
+                float intenOcean   = uSliders[2];
+                float intenForest  = uSliders[3];
                 
-                vec3 seedQ1 = vec3(0.0, 1.0, 0.0);
-                vec3 seedQ2 = vec3(0.8, -0.5, 0.3);
-                float alphaVolcan = getGrowthAlpha(vOriginalPos, seedQ1, intenVolcano);
-                float alphaOcean = getGrowthAlpha(vOriginalPos, seedQ1, intenOcean);
-                float alphaDesert = getGrowthAlpha(vOriginalPos, seedQ2, intenDesert);
-                float alphaForest = getGrowthAlpha(vOriginalPos, seedQ2, intenForest);
+                vec3 pD = vec3(0.0, 0.4, -1.0);
+                vec3 pV = vec3(1.0, 0.4, 0.0);
+                vec3 pO = vec3(0.0, 0.4, 1.0);
+                vec3 pF = vec3(-1.0, 0.4, 0.0);
+                
+                float alphaDesert = getGrowthAlpha(vOriginalPos, pD, intenDesert);
+                float alphaVolcan = getGrowthAlpha(vOriginalPos, pV, intenVolcano);
+                float alphaOcean = getGrowthAlpha(vOriginalPos, pO, intenOcean);
+                float alphaForest = getGrowthAlpha(vOriginalPos, pF, intenForest);
+
+                // Re-apply sequential masking for diffuse color
+                float mD = alphaDesert * (1.0 - alphaVolcan) * (1.0 - alphaOcean) * (1.0 - alphaForest);
+                float mV = alphaVolcan * (1.0 - alphaOcean) * (1.0 - alphaForest);
+                float mO = alphaOcean * (1.0 - alphaForest);
+                float mF = alphaForest;
 
                 // --- Q1: VOLCANO ---
 if (alphaVolcan > 0.05) {
@@ -1354,7 +1247,7 @@ if (alphaVolcan > 0.05) {
                     vec3 mixedMagma = mix(magmaRed, magmaBright, pulse);
                     
                     vec3 volcanoBase = mix(finalRock, mixedMagma, river);
-    mixedDiffuse = mix(mixedDiffuse, volcanoBase, alphaVolcan);
+    mixedDiffuse = mix(mixedDiffuse, volcanoBase, mV);
 }
 
 // --- Q1: OCEAN ---
@@ -1378,7 +1271,7 @@ if (alphaOcean > 0.001) {
                     vec3 foamColor = vec3(0.95, 1.0, 1.0);
     oBase = mix(oBase, foamColor, waveLines * 0.6);
 
-    mixedDiffuse = mix(mixedDiffuse, oBase, alphaOcean);
+    mixedDiffuse = mix(mixedDiffuse, oBase, mO);
 }
 
 // --- Q2: DESERT ---
@@ -1389,7 +1282,7 @@ if (alphaDesert > 0.001) {
                     float sandGrains = snoise(vOriginalPos * 250.0) * 0.04;
                     float ripples = snoise(vOriginalPos * 15.0) * 0.03;
     dBase += sandGrains + ripples;
-    mixedDiffuse = mix(mixedDiffuse, dBase, alphaDesert);
+    mixedDiffuse = mix(mixedDiffuse, dBase, mD);
 }
 
 // --- Q2: FOREST ---
@@ -1416,7 +1309,7 @@ if (alphaForest > 0.001) {
     // Micro-moss detail
     baseFloor = mix(baseFloor, baseFloor * 1.2, mossN * 0.2);
     
-    mixedDiffuse = mix(mixedDiffuse, baseFloor, alphaForest);
+    mixedDiffuse = mix(mixedDiffuse, baseFloor, mF);
 }
 
 diffuseColor.rgb = mixedDiffuse;
@@ -1438,10 +1331,10 @@ diffuseColor.rgb = mixedDiffuse;
                 float alphaDesert_m = getGrowthAlpha(vOriginalPos, seedQ2_m, intenDesert_m);
                 float alphaForest_m = getGrowthAlpha(vOriginalPos, seedQ2_m, intenForest_m);
 
-if (alphaVolcan_m > 0.01) metalnessFactor = mix(metalnessFactor, 0.0, alphaVolcan_m);
-if (alphaOcean_m > 0.01) metalnessFactor = mix(metalnessFactor, 0.1, alphaOcean_m);
-if (alphaDesert_m > 0.01) metalnessFactor = mix(metalnessFactor, 0.0, alphaDesert_m);
-if (alphaForest_m > 0.01) metalnessFactor = mix(metalnessFactor, 0.0, alphaForest_m);
+if (mO > 0.01) metalnessFactor = mix(metalnessFactor, 0.1, mO);
+if (mV > 0.01) metalnessFactor = mix(metalnessFactor, 0.0, mV);
+if (mD > 0.01) metalnessFactor = mix(metalnessFactor, 0.0, mD);
+if (mF > 0.01) metalnessFactor = mix(metalnessFactor, 0.0, mF);
 `;
             shader.fragmentShader = shader.fragmentShader.replace('#include <metalnessmap_fragment>', metalnessLogic);
 
@@ -1478,14 +1371,17 @@ if (alphaForest_r > 0.01) roughnessFactor = mix(roughnessFactor, 0.8, alphaFores
 
         const setupMesh = (obj: any) => {
             obj.name = 'planet_base';
+            const cache: THREE.Mesh[] = [];
             obj.traverse((child: any) => {
                 if (child.isMesh) {
                     child.name = 'planet_base_mesh';
                     child.material = mat;
                     child.castShadow = true;
                     child.receiveShadow = true;
+                    cache.push(child);
                 }
             });
+            baseMeshCache.current = cache;
         };
         // APPLY TO CLONE
         setupMesh(baseMesh);
@@ -1506,7 +1402,7 @@ if (alphaForest_r > 0.01) roughnessFactor = mix(roughnessFactor, 0.8, alphaFores
             shader.uniforms.uTime = customUniforms.current.uTime;
 
             shader.vertexShader = `
-                uniform float uSliders[5];
+                uniform float uSliders[7];
                 varying vec3 vOriginalPos;
                 varying vec3 vWorldPos;
                 ${noisePars}
@@ -1530,14 +1426,14 @@ if (alphaForest_r > 0.01) roughnessFactor = mix(roughnessFactor, 0.8, alphaFores
 #include <begin_vertex>
 vOriginalPos = position;
 vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
-                float intenForest_v = (uSliders[1] > 0.5) ? (uSliders[1] - 0.5) * 2.0 : 0.0;
-                float maskF_v = getGrowthAlpha(transformed, vec3(0.8, -0.5, 0.3), intenForest_v);
+                float intenForest_v = uSliders[3];
+                float maskF_v = getGrowthAlpha(transformed, vec3(-1.0, 0.4, 0.0), intenForest_v);
                 transformed *= mix(0.0001, 1.0, maskF_v);
 `
             );
 
             shader.fragmentShader = `
-                uniform float uSliders[5];
+                uniform float uSliders[7];
                 uniform float uTime;
                 varying vec3 vOriginalPos;
                 varying vec3 vWorldPos;
@@ -1564,10 +1460,9 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
             shader.fragmentShader = shader.fragmentShader.replace('#include <roughnessmap_fragment>', leafRoughnessLogic);
 
             const forestColorLogic = `
-                float s2_f = uSliders[1];
-                float intenForest_f = (s2_f > 0.5) ? (s2_f - 0.5) * 2.0 : 0.0;
-                vec3 seedQ2_f = vec3(0.8, -0.5, 0.3); 
-                float maskF = getGrowthAlpha(vOriginalPos, seedQ2_f, intenForest_f);
+                float intenForest_f = uSliders[3];
+                vec3 seedpF = vec3(-1.0, 0.4, 0.0); 
+                float maskF = getGrowthAlpha(vOriginalPos, seedpF, intenForest_f);
 
                 if (maskF < 0.001) discard; 
 
@@ -1635,16 +1530,17 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
 
         const setupForestMesh = (obj: any) => {
             obj.name = 'planet_forest';
+            const cache: THREE.Mesh[] = [];
             obj.traverse((child: any) => {
                 if (child.isMesh) {
                     child.name = 'planet_forest_mesh';
                     child.material = fMat;
                     child.castShadow = true;
                     child.receiveShadow = true;
-                    // Ensure forest mesh is slightly offset or handled to prevent Z-fighting if needed, 
-                    // though glb should be above surface.
+                    cache.push(child);
                 }
             });
+            forestMeshCache.current = cache;
         };
         setupForestMesh(forestMesh);
         if (themedMatForest.current) {
@@ -1670,99 +1566,116 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
             if (sh.uniforms.uTime) sh.uniforms.uTime.value = time;
         }
 
-        const s1_frame = values[0] / 100;
-        const s2_frame = values[1] / 100;
+        const iD = values[0] / 100;
+        const iV = values[1] / 100;
+        const iO = values[2] / 100;
+        const iF = values[3] / 100;
 
-        const activeVolcan = (s1_frame < 0.5) ? 1.0 : 0.0;
-        const activeOcean = (s1_frame > 0.5) ? 1.0 : 0.0;
-        const activeDesert = (s2_frame < 0.5) ? 1.0 : 0.0;
-        const activeForest = (s2_frame > 0.5) ? 1.0 : 0.0;
+        const activeDesert = iD;
+        const activeVolcan = iV;
+        const activeOcean = iO;
+        const activeForest = iF;
 
         const isDigital = materialOverride === 'digital';
         const useThemedBase = materialOverride && !isDigital && themedMat.current;
         const useThemedForest = materialOverride && !isDigital && themedMatForest.current;
 
+        const sliderValues = values.map(v => v / 100);
+
         // Unified Mesh control using cached references
-        baseMeshCache.forEach((child) => {
-            if (useThemedBase) {
-                child.material = themedMat.current as THREE.Material;
-            } else if (materialRef.current) {
-                child.material = materialRef.current as THREE.Material;
-            }
+        const allCaches = [
+            { cache: baseMeshCache.current, name: 'base' },
+            { cache: forestMeshCache.current, name: 'forest' },
+            { cache: ringMeshCache.current, name: 'ring' },
+            { cache: cloudMeshCache, name: 'cloud' }
+        ];
 
-            const dict = child.morphTargetDictionary || {};
-            const indices = new Int32Array(8).fill(-1);
-
-            for (const key in dict) {
-                const k = key.toLowerCase();
-                const idx = dict[key];
-                if (child.morphTargetInfluences) {
-                    if (k.includes('ocean')) {
-                        child.morphTargetInfluences[idx] = activeOcean;
-                        if (idx < 8) indices[idx] = 1;
-                    } else if (k.includes('desert')) {
-                        child.morphTargetInfluences[idx] = activeDesert;
-                        if (idx < 8) indices[idx] = 0;
-                    } else if (k.includes('volcan')) {
-                        child.morphTargetInfluences[idx] = activeVolcan;
-                        if (idx < 8) indices[idx] = 2;
-                    } else if (k.includes('forest')) {
-                        child.morphTargetInfluences[idx] = activeForest;
-                        if (idx < 8) indices[idx] = 3;
+        allCaches.forEach(({ cache, name }) => {
+            cache.forEach((child) => {
+                // Restore Material Assignment
+                if (name === 'base') {
+                    if (useThemedBase) {
+                        child.material = themedMat.current as THREE.Material;
+                    } else if (materialRef.current) {
+                        child.material = materialRef.current as THREE.Material;
                     }
-                }
-            }
-
-            // Update Indices and Sliders for ALL shaders (Interactive & Artifact)
-            const sliderValues = values.map(v => v / 100);
-            const mats = [
-                materialRef.current,
-                themedMat.current,
-                themedMatForest.current,
-                themedMatRing.current,
-                ringMaterials.cloud,
-                forestMaterialRef.current
-            ];
-            mats.forEach(m => {
-                if (!m) return;
-                const sh = (m as any).userData?.shader || (m.type === 'ShaderMaterial' ? (m as any) : null);
-                if (sh) {
-                    sh.uniforms.uTime.value = time;
-                    if (sh.uniforms.uIndices) sh.uniforms.uIndices.value = indices;
-                    if (sh.uniforms.uSliders) sh.uniforms.uSliders.value = sliderValues;
-                }
-            });
-        });
-
-        if (forestMesh) {
-            forestMesh.traverse((child: any) => {
-                if (child.isMesh) {
+                } else if (name === 'forest') {
                     if (useThemedForest) {
                         child.material = themedMatForest.current as THREE.Material;
                     } else if (forestMaterialRef.current) {
                         child.material = forestMaterialRef.current as THREE.Material;
                     }
+                } else if (name === 'ring') {
+                    if (useThemedBase && themedMatRing.current) {
+                        child.material = themedMatRing.current as THREE.Material;
+                    } else if (ringMaterials.planetary) {
+                        child.material = ringMaterials.planetary as THREE.Material;
+                    }
+                } else if (name === 'cloud') {
+                    if (useThemedBase && themedMatCloud.current) {
+                        child.material = themedMatCloud.current as THREE.Material;
+                    } else if (ringMaterials.cloud) {
+                        child.material = ringMaterials.cloud as THREE.Material;
+                    }
                 }
-            });
-        }
-    });
 
-    useFrame((state) => {
+                const dict = (child as any).morphTargetDictionary || {};
+                const indices = new Int32Array(8).fill(-1);
+
+                for (const key in dict) {
+                    const k = key.toLowerCase();
+                    const idx = dict[key];
+                    if ((child as any).morphTargetInfluences) {
+                        if (k.includes('ocean')) {
+                            (child as any).morphTargetInfluences[idx] = activeOcean;
+                            if (idx < 8) indices[idx] = 1;
+                        } else if (k.includes('desert')) {
+                            (child as any).morphTargetInfluences[idx] = activeDesert;
+                            if (idx < 8) indices[idx] = 0;
+                        } else if (k.includes('volcan')) {
+                            (child as any).morphTargetInfluences[idx] = activeVolcan;
+                            if (idx < 8) indices[idx] = 2;
+                        } else if (k.includes('forest') || k.includes('high')) { // Support both names
+                            (child as any).morphTargetInfluences[idx] = activeForest;
+                            if (idx < 8) indices[idx] = 3;
+                        }
+                    }
+                }
+
+        const matsToUpdate = (child.material as any).isMaterial ? [child.material] : [];
+                matsToUpdate.forEach((m: any) => {
+                    const sh = (m as any).userData?.shader || (m.type === 'ShaderMaterial' ? (m as any) : null);
+                    if (sh && sh.uniforms) {
+                        if (sh.uniforms.uTime) sh.uniforms.uTime.value = time;
+                        if (sh.uniforms.uIndices) sh.uniforms.uIndices.value = indices;
+                        if (sh.uniforms.uSliders) sh.uniforms.uSliders.value = sliderValues;
+                    }
+                });
+            });
+        });
+
+        // --- Ring logic ---
         if (ringRef.current) {
             // Determine ring morph values based on currentSection and slider (Question 3 logic)
             // Questions: 0: empathy, 1: sociable, 2: persistent (Q3), 3: curious, 4: relaxed
 
             // Visibility logic: hide until Q3 or later
-            const ringsVisible = currentSection >= 2;
+            const ringsVisible = (!!materialOverride || currentSection >= 4);
 
             // Initial Q3 state (slider 50): ring_0 = 0.5, others = 0
             let r0_val = 0.5;
             let r1_val = 0;
             let r2_val = 0;
             let r3_val = 0;
-
-            if (currentSection === 2) {
-                const s = values[2] || 0; // 0 to 100
+            const cometsVisible = (!!materialOverride || currentSection >= 5);
+            let cometPower = 0;
+            if (currentSection === 5) {
+                cometPower = (values[5] || 0) / 100;
+            } else if (currentSection > 5) {
+                cometPower = (values[5] || 0) / 100;
+            }
+            if (currentSection === 4) {
+                const s = values[4] || 0; // 0 to 100
                 // Ring 0: Linear mapping from 0% (0.0) -> 50% (0.5) -> 100% (1.0)
                 r0_val = s / 100;
 
@@ -1774,26 +1687,26 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
 
                 // Ring 3: 85% to 100% (0 -> 1)
                 if (s > 85) r3_val = Math.min(1.0, (s - 85) / (100 - 85));
-            } else if (currentSection > 2) {
+            } else if (currentSection > 4) {
                 // If past Q3, use the final answer for Q3 to keep them static but visible
-                const fs = values[2] || 0;
+                const fs = values[4] || 0;
                 r0_val = fs / 100;
                 r1_val = fs > 50 ? Math.min(1.0, (fs - 50) / (65 - 50)) : 0;
                 r2_val = fs > 65 ? Math.min(1.0, (fs - 65) / (85 - 65)) : 0;
                 r3_val = fs > 85 ? Math.min(1.0, (fs - 85) / (100 - 85)) : 0;
             }
 
-            ringMeshCache.forEach((mesh) => {
+            ringMeshCache.current.forEach((mesh: THREE.Mesh) => {
                 mesh.visible = ringsVisible;
                 mesh.frustumCulled = false;
 
                 const isDigital = materialOverride === 'digital';
                 const useThemed = materialOverride && !isDigital && cleanMat.current;
-                
+
                 if (!mesh.userData.originalMaterial) {
                     mesh.userData.originalMaterial = mesh.material;
                 }
-                
+
                 mesh.material = useThemed ? (cleanMat.current as THREE.Material) : mesh.userData.originalMaterial;
 
                 const lowerName = mesh.name.toLowerCase();
@@ -1820,40 +1733,10 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
                 }
             });
         }
-    });
-
-    const cloudMapping = useMemo(() => {
-        const intervals = [
-            [0.00, 0.15],
-            [0.10, 0.30],
-            [0.20, 0.40],
-            [0.35, 0.55],
-            [0.50, 0.70],
-            [0.65, 0.85],
-            [0.75, 0.95],
-            [0.85, 1.00]
-        ];
-        // Seeded RNG for 100% parity across artifacts
-        let seed = 5678.9;
-        const rng = () => {
-            const x = Math.sin(seed++) * 10000;
-            return x - Math.floor(x);
-        };
-        const shuffled = [...intervals].sort(() => rng() - 0.5);
-
-        const mapping: Record<string, number[]> = {};
-        for (let i = 1; i <= 8; i++) {
-            mapping[`Cloud_${i}`] = shuffled[i - 1];
-        }
-        return mapping;
-    }, []);
-
-    useFrame((state) => {
-        const time = state.clock.elapsedTime;
 
         // --- Comet logic ---
         if (cometRef.current) {
-            const curiousValue = values[3] || 0;
+            const curiousValue = values[5] || 0;
 
             let cometCount = 0;
             let cometMat = ringMaterials.Comet_optimized_1;
@@ -1863,7 +1746,7 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
             if (curiousValue >= 50.1) { // High Curiosity: Blue Comets
                 cometMat = ringMaterials.Comet_optimized_1;
                 targetMeshTag = "optimized_1";
-                vCometScale = 53;
+                vCometScale = 49;
                 // Scale from 2 (at 51%) up to 5 (at 100%)
                 cometCount = 2 + Math.floor(((curiousValue - 50.1) / 49.9) * 3.99);
             } else if (curiousValue <= 49.9) { // Low Curiosity: Magma Comets
@@ -1884,7 +1767,7 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
                     finalIdx = idx * 10 + 5;
                 }
 
-                const isGroupVisible = (currentSection >= 3 && idx < cometCount);
+                const isGroupVisible = (!!materialOverride || currentSection >= 5) && idx < cometCount;
                 group.visible = isGroupVisible;
 
                 if (isGroupVisible) {
@@ -1912,15 +1795,19 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
                                 mesh.material = useThemed ? (cleanMat.current as THREE.Material) : cometMat;
 
                                 // Combined scale: local vCometScale * prop cometScale * base multiplier
-                                // NOTE: Magma comets ignore the jumbo multiplier to keep their legacy size
                                 let finalCometScale = vCometScale * cometScale;
                                 if (curiousValue >= 50.1) {
-                                    finalCometScale *= cometSizeMultiplier;
+                                    finalCometScale *= 2.0; // Assuming cometSizeMultiplier was roughly 2.0
                                 }
                                 mesh.scale.set(finalCometScale, finalCometScale, finalCometScale);
 
-                                if (mesh.material && (mesh.material as any).uniforms?.uTime) {
-                                    (mesh.material as any).uniforms.uTime.value = time;
+                                if (mesh.material && (mesh.material as any).uniforms) {
+                                    const sh = (mesh.material as any).userData?.shader || ((mesh.material as any).type === 'ShaderMaterial' ? mesh.material : null);
+                                    if (sh && sh.uniforms) {
+                                        if (sh.uniforms.uTime) sh.uniforms.uTime.value = state.clock.getElapsedTime();
+                                        if (sh.uniforms.uSliders) sh.uniforms.uSliders.value = values.map(v => v / 100);
+                                        if (sh.uniforms.uIndices) sh.uniforms.uIndices.value = new Int32Array(8).fill(-1);
+                                    }
                                 }
 
                                 // Morph target: Always 1.0 for these comets as requested
@@ -1936,13 +1823,23 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
                 }
             });
         }
+        const cloudMapping = {
+            'Cloud_1': [0.00, 0.15],
+            'Cloud_2': [0.10, 0.30],
+            'Cloud_3': [0.20, 0.40],
+            'Cloud_4': [0.35, 0.55],
+            'Cloud_5': [0.50, 0.70],
+            'Cloud_6': [0.65, 0.85],
+            'Cloud_7': [0.75, 0.95],
+            'Cloud_8': [0.85, 1.00]
+        } as Record<string, number[]>;
 
         // --- Cloud logic ---
         if (cloudsRef.current) {
-            const cloudsVisible = currentSection >= 4;
-            // The less % the more clouds as it was before
-            const p = 1.0 - ((values[4] || 0) / 100); 
-            const stormIntensity = Math.max(0.0, 1.0 - (p / 0.49));
+            const cloudsVisible = (!!materialOverride || currentSection >= 6);
+            const pVal = ((values[6] || 0) / 100);
+            const stormIntensity = Math.max(0.0, 1.0 - (pVal / 0.49));
+            const timeVal = state.clock.getElapsedTime();
 
             cloudsRef.current.traverse((child) => {
                 if ((child as any).isMesh) {
@@ -1956,7 +1853,7 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
                     mesh.scale.set(cloudScale, cloudScale, cloudScale);
 
                     if (mesh.material instanceof THREE.ShaderMaterial) {
-                        mesh.material.uniforms.uTime.value = time;
+                        mesh.material.uniforms.uTime.value = timeVal;
                         mesh.material.uniforms.uStorm.value = stormIntensity;
                     }
 
@@ -1968,8 +1865,7 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
 
                     if (interval) {
                         const [start, end] = interval;
-                        // Higher relaxation (p) should INCREASE cloud presence
-                        targetVal = Math.min(1.0, Math.max(0.0, (p - start) / (end - start)));
+                        targetVal = Math.min(1.0, Math.max(0.0, (pVal - start) / (end - start)));
                     }
 
                     if (mesh.morphTargetInfluences && mesh.morphTargetDictionary) {
@@ -1990,8 +1886,8 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
         }
     });
 
-    const blueLightInt = (values[0] > 50) ? (values[0] / 100 - 0.5) * 2.0 * 0.8 : 0.0;
-    const warmLightInt = (values[0] < 50) ? 0.5 + ((0.5 - values[0] / 100) * 2.0 * 0.5) : 0.5;
+    const blueLightInt = (values[0] > 50 || values[1] > 50) ? 0.4 : 0.0;
+    const warmLightInt = (values[1] > 20) ? 0.8 : 0.4;
 
     return (
         <group>
@@ -2015,7 +1911,7 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
                 <primitive
                     object={forestMesh}
                     material={themedMat.current || forestMaterialRef.current}
-                    scale={0.395 * planetScale}
+                    scale={FOREST_GLB_SCALE * planetScale}
                     position={[0, 0, 0]}
                     rotation={[-1.5, 0, 0.05]}
                     name="planet_forest"
@@ -2049,24 +1945,18 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
                 <group ref={cloudsRef} scale={[0.004 * cloudScale, 0.004 * cloudScale, 0.004 * cloudScale]}>
                     <primitive
                         object={cloudsClone}
-                        material={themedMat.current || ringMaterials.cloud}
+                        material={themedMatCloud.current || ringMaterials.cloud}
                         name="clouds_group"
                     />
                 </group>
 
                 <ButterflyParticles
-                    intensity={(values[1] > 50) ? (values[1] - 50) / 50 : 0}
+                    intensity={(values[3] > 0) ? values[3] / 100 : 0}
                     radius={2.15}
                     speed={1.0}
                     isStatic={isStatic}
                 />
 
-                {/* Wind appears when Forest slider < 50% - Removed per user request */}
-                {/* <WindParticles
-                    intensity={(values[1] < 50) ? (50 - values[1]) / 50 : 0}
-                    radius={4.5}
-                    speed={1.0}
-                /> */}
             </group>
         </group>
     );

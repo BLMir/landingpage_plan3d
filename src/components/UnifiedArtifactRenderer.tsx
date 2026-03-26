@@ -101,12 +101,12 @@ float getGrowthAlpha_planet(vec3 pos, vec3 seedPoint, float intensity) {
 `;
 
 const sharedVertPars = `
-varying float vIsForest, vIsRing;
+varying float vIsForest, vIsRing, vIsCloud;
 varying vec3 vWorldPos, vOriginalPos;
 varying vec2 vCustomUv;
 attribute vec3 aOriginalPos;
-uniform float uSliders[5], uTime, uHasDesertMap, uHasOceanMap, uIsArtifact;
-uniform float uIsForest, uIsRing, uIsLamp, uIsBaseMesh;
+uniform float uSliders[7], uTime, uHasDesertMap, uHasOceanMap, uIsArtifact;
+uniform float uIsForest, uIsRing, uIsLamp, uIsBaseMesh, uIsCloud;
 uniform sampler2D uDesertMap, uOceanMap;
 uniform vec3 uDesertColor, uOceanColor;
 uniform int uIndices[8];
@@ -115,11 +115,11 @@ ${getGrowthAlphaLogic}
 `;
 
 const sharedFragPars = `
-varying float vIsForest, vIsRing;
+varying float vIsForest, vIsRing, vIsCloud;
 varying vec3 vWorldPos, vOriginalPos;
 varying vec2 vCustomUv;
-uniform float uSliders[5], uTime, uHasDesertMap, uHasOceanMap, uIsArtifact;
-uniform float uIsForest, uIsRing, uIsLamp, uIsBaseMesh;
+uniform float uSliders[7], uTime, uHasDesertMap, uHasOceanMap, uIsArtifact;
+uniform float uIsForest, uIsRing, uIsLamp, uIsBaseMesh, uIsCloud;
 uniform sampler2D uDesertMap, uOceanMap;
 uniform vec3 uDesertColor, uOceanColor;
 uniform vec3 uOceanGlow, uVolcanoGlow, uDesertGlow;
@@ -129,11 +129,36 @@ ${getGrowthAlphaLogic}
 `;
 
 const sharedFragLogic = `
-float s2 = uSliders[1];
-float iF = (s2 > 0.5) ? (s2 - 0.5) * 2.0 : 0.0;
-vec3 p2 = vec3(0.8, -0.5, 0.3);
-float aF = getGrowthAlpha_planet(vOriginalPos, p2, iF);
-if (vIsForest > 0.5 && aF < 0.01) discard;
+float iD = uSliders[0];
+float iV = uSliders[1];
+float iO = uSliders[2];
+float iF = uSliders[3];
+
+vec3 seedD = vec3(0.0, 0.4, -1.0);
+vec3 seedV = vec3(1.0, 0.4, 0.0);
+vec3 seedO = vec3(0.0, 0.4, 1.0);
+vec3 seedF = vec3(-1.0, 0.4, 0.0);
+
+float aD = getGrowthAlpha_planet(vOriginalPos, seedD, iD);
+float aV = getGrowthAlpha_planet(vOriginalPos, seedV, iV);
+float aO = getGrowthAlpha_planet(vOriginalPos, seedO, iO);
+float aF = getGrowthAlpha_planet(vOriginalPos, seedF, iF);
+
+// Mask logic: Desert -> Volcano -> Ocean -> Forest
+float mD = aD * (1.0 - aV) * (1.0 - aO) * (1.0 - aF);
+float mV = aV * (1.0 - aO) * (1.0 - aF);
+float mO = aO * (1.0 - aF);
+float mF = aF;
+
+if (vIsForest > 0.5 && mF < 0.01) discard;
+if (vIsCloud > 0.5) {
+    // Clouds in artifacts should just show the base material color (silver/gold/white)
+    // and skip the biome-based color mixing and discarding.
+    #ifdef USE_COLOR
+        diffuseColor.rgb = diffuse;
+        return; 
+    #endif
+}
 
 #ifdef USE_COLOR
     diffuseColor.rgb = diffuse; // Default inherited color
@@ -181,20 +206,20 @@ export const applyArtifactShader = (shader: any, uniforms: any) => {
     shader.uniforms.uIndices = uniforms.uIndices;
     shader.uniforms.uIsLamp = uniforms.uIsLamp || { value: 0.0 };
     shader.uniforms.uIsBaseMesh = uniforms.uIsBaseMesh || { value: 0.0 };
-    shader.uniforms.uIsForest = { value: 0.0 };
-    shader.uniforms.uIsRing = { value: 0.0 };
-    shader.vertexShader = shader.vertexShader.replace('#include <common>', `#include <common>\n${sharedVertPars}`).replace('#include <begin_vertex>', `#include <begin_vertex>\nvCustomUv = uv; vOriginalPos = position; vIsForest = uIsForest; vIsRing = uIsRing;`);
+    shader.uniforms.uIsCloud = uniforms.uIsCloud || { value: 0.0 };
+    shader.uniforms.uIsForest = uniforms.uIsForest || { value: 0.0 };
+    shader.uniforms.uIsRing = uniforms.uIsRing || { value: 0.0 };
+    shader.vertexShader = shader.vertexShader.replace('#include <common>', `#include <common>\n${sharedVertPars}`).replace('#include <begin_vertex>', `#include <begin_vertex>\nvCustomUv = uv; vOriginalPos = position; vIsForest = uIsForest; vIsRing = uIsRing; vIsCloud = uIsCloud;`);
 
     const customMorphLogic = `
         float mI[8]; for (int i=0; i<8; i++) mI[i] = 0.0;
         
         if (uIsBaseMesh > 0.5) {
-            float s1 = uSliders[0], s2 = uSliders[1];
-            float iV = (s1 < 0.5) ? (0.5 - s1) * 2.0 : 0.0, iO = (s1 > 0.5) ? (s1 - 0.5) * 2.0 : 0.0, iD = (s2 < 0.5) ? (0.5 - s2) * 2.0 : 0.0, iF = (s2 > 0.5) ? (s2 - 0.5) * 2.0 : 0.0;
-            vec3 p1 = vec3(0.0, 1.0, 0.0), p2 = vec3(0.8, -0.5, 0.3);
-            float aV = getGrowthAlpha_planet(transformed, p1, iV), aO = getGrowthAlpha_planet(transformed, p1, iO), aD = getGrowthAlpha_planet(transformed, p2, iD), aF = getGrowthAlpha_planet(transformed, p2, iF);
-            float maskD = aD*(1.0-aF), maskO = aO*(1.0-aV)*(1.0-aD)*(1.0-aF), maskV = aV*(1.0-aO)*(1.0-aD)*(1.0-aF);
-            for (int i=0; i<8; i++) { int t = uIndices[i]; if (t==0) mI[i]=maskD*1.8; else if (t==1) mI[i]=maskO*1.8; else if (t==2) mI[i]=maskV*1.8; else if (t==3) mI[i]=aF*1.8; }
+            float iD = uSliders[0], iV = uSliders[1], iO = uSliders[2], iF = uSliders[3];
+            vec3 sD = vec3(0.0, 0.4, -1.0), sV = vec3(1.0, 0.4, 0.0), sO = vec3(0.0, 0.4, 1.0), sF = vec3(-1.0, 0.4, 0.0);
+            float aD = getGrowthAlpha_planet(transformed, sD, iD), aV = getGrowthAlpha_planet(transformed, sV, iV), aO = getGrowthAlpha_planet(transformed, sO, iO), aF = getGrowthAlpha_planet(transformed, sF, iF);
+            float mD = aD*(1.0-aV)*(1.0-aO)*(1.0-aF), mV = aV*(1.0-aO)*(1.0-aF), mO = aO*(1.0-aF), mF = aF;
+            for (int i=0; i<8; i++) { int t = uIndices[i]; if (t==0) mI[i]=mD*1.8; else if (t==1) mI[i]=mO*1.8; else if (t==2) mI[i]=mV*1.8; else if (t==3) mI[i]=mF*1.8; }
             ${THREE.ShaderChunk['morphtarget_vertex'].replace(/morphTargetInfluences/g, 'mI')}
         } else {
             ${THREE.ShaderChunk['morphtarget_vertex']} // Pass through raw influence arrays natively
