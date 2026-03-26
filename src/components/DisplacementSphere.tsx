@@ -90,6 +90,8 @@ interface DisplacementSphereProps {
     tintOpacity?: number;
     isStatic?: boolean;
     materialOverride?: string;
+    lampColors?: any;
+    artifactMaterials?: any;
     planetScale?: number;
     cloudScale?: number;
     cometScale?: number;
@@ -579,6 +581,8 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
     tintOpacity,
     isStatic,
     materialOverride,
+    lampColors,
+    artifactMaterials,
     planetScale = 1.0,
     cloudScale = 1.0,
     cometScale = 1.0,
@@ -1036,8 +1040,8 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
             return;
         }
         import('./UnifiedArtifactRenderer').then(mod => {
-            const baseMat = (mod.ARTIFACT_MATERIALS as any)[materialOverride] || mod.ARTIFACT_MATERIALS.digital;
-            const createM = (isF: number, isR: number) => {
+            const baseMat = (artifactMaterials ? artifactMaterials[materialOverride] : (mod.ARTIFACT_MATERIALS as any)[materialOverride]) || mod.ARTIFACT_MATERIALS.digital;
+            const createM = (isF: number, isR: number, isBase: number) => {
                 const m = baseMat.clone();
                 m.onBeforeCompile = (sh: any) => {
                     if (!m.userData) (m as any).userData = {};
@@ -1049,19 +1053,55 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
                         uDesertMap: { value: (desertMaps && desertMaps[0]) || null },
                         uOceanMap: { value: (oceanMaps && oceanMaps[0]) || null },
                         uHasDesertMap: { value: desertMaps ? 1.0 : 0.0 },
-                        uHasOceanMap: { value: oceanMaps ? 1.0 : 0.0 }
+                        uHasOceanMap: { value: oceanMaps ? 1.0 : 0.0 },
+                        uOceanGlow: { value: new THREE.Color(lampColors?.ocean.r ?? 0.05, lampColors?.ocean.g ?? 0.35, lampColors?.ocean.b ?? 0.85) },
+                        uVolcanoGlow: { value: new THREE.Color(lampColors?.volcano.r ?? 0.85, lampColors?.volcano.g ?? 0.15, lampColors?.volcano.b ?? 0.05) },
+                        uDesertGlow: { value: new THREE.Color(lampColors?.desert.r ?? 0.9, lampColors?.desert.g ?? 0.7, lampColors?.desert.b ?? 0.15) },
+                        uIsLamp: { value: materialOverride === 'lamp' ? 1.0 : 0.0 }
                     });
                     sh.uniforms.uIsForest.value = isF;
                     sh.uniforms.uIsRing.value = isR;
+                    sh.uniforms.uIsBaseMesh = { value: isBase };
                 };
                 return m;
             };
-            themedMat.current = createM(0, 0);
-            themedMatForest.current = createM(1, 0);
-            themedMatRing.current = createM(0, 1);
-            cleanMat.current = baseMat.clone();
+            themedMat.current = createM(0, 0, 1.0);
+            themedMatForest.current = createM(1, 0, 0.0);
+            themedMatRing.current = createM(0, 1, 0.0);
+            cleanMat.current = createM(0, 0, 0.0);
         });
     }, [materialOverride]);
+
+    // HMR Reactive Sync for PBR Base Attributes (Roughness, Metalness, Color)
+    useEffect(() => {
+        if (!artifactMaterials || !materialOverride) return;
+        const sourceMat = artifactMaterials[materialOverride];
+        if (!sourceMat) return;
+        const mats = [themedMat.current, themedMatForest.current, themedMatRing.current, cleanMat.current];
+        mats.forEach(m => {
+            if (m && (m as any).isMeshStandardMaterial) {
+                (m as any).color.copy(sourceMat.color);
+                (m as any).roughness = sourceMat.roughness;
+                (m as any).metalness = sourceMat.metalness;
+                m.needsUpdate = true; // Force WebGL pipeline recompilation for HMR
+            }
+        });
+    }, [artifactMaterials, materialOverride]);
+
+    // HMR Reactive Sync for Internal Shader RGB Colors (Biome Map)
+    useEffect(() => {
+        if (!lampColors) return;
+        const mats = [themedMat.current, themedMatForest.current, themedMatRing.current, cleanMat.current];
+        mats.forEach(m => {
+            if (m && m.userData && m.userData.shader) {
+                const sh = m.userData.shader;
+                if (sh.uniforms.uOceanGlow) sh.uniforms.uOceanGlow.value.set(lampColors.ocean.r, lampColors.ocean.g, lampColors.ocean.b);
+                if (sh.uniforms.uVolcanoGlow) sh.uniforms.uVolcanoGlow.value.set(lampColors.volcano.r, lampColors.volcano.g, lampColors.volcano.b);
+                if (sh.uniforms.uDesertGlow) sh.uniforms.uDesertGlow.value.set(lampColors.desert.r, lampColors.desert.g, lampColors.desert.b);
+                m.needsUpdate = true; // Force WebGL pipeline update
+            }
+        });
+    }, [lampColors]);
 
     const baseMeshCache = useMemo(() => {
         const cache: THREE.Mesh[] = [];

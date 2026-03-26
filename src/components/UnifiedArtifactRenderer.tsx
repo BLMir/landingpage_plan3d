@@ -1,5 +1,5 @@
-import React, { Suspense } from 'react';
-import { Canvas } from '@react-three/fiber';
+import React, { Suspense, useState, useEffect } from 'react';
+import { Canvas, useThree } from '@react-three/fiber';
 import { DisplacementSphere } from './DisplacementSphere';
 import * as THREE from 'three';
 import { MeshStandardMaterial } from 'three';
@@ -7,6 +7,24 @@ import { MeshStandardMaterial } from 'three';
 // --- ARTIFACT TRANSFORMS (Position, Rotation, and Scaling) ---
 export const GLOBAL_POSITION_OFFSET: [number, number, number] = [0, 0, 0]; // Bulk shift for all 4 slots
 export const GLOBAL_SCALE_MULTIPLIER: number = 1.0; // Global master scale for everything
+
+// --- HALO AURA SETTINGS ---
+// Note: Use a hard refresh (Cmd+R) after changing Material constants to clear the Next.js WebGL cache!
+export const HALO_SETTINGS = {
+    scaleMultiplier: 7.65,  // Overall 2D screen scale of the Halo backdrop!
+    glowIntensity: 2.8,     // Brightness multiplier
+    fresnelPower: 2.0,      // Sharpness/Falloff rate of the glow (higher = thinner aura)
+    fresnelBias: 1.2        // The absolute Radius/Stretch of the inner white core
+};
+
+// --- LAMP BASE COLORS (EXPOSED) ---
+// Tweak the precise physical paint shades of the Planet biomes here.
+export const LAMP_BIOME_COLORS = {
+    ocean: { r: 0.05, g: 0.35, b: 0.85 },   // Deep plastic blue
+    volcano: { r: 0.85, g: 0.15, b: 0.05 }, // Rich plastic red
+    desert: { r: 0.9, g: 0.7, b: 0.15 }     // Warm plastic yellow
+};
+
 export const ARTIFACT_TRANSFORMS: Record<string, { position: [number, number, number], rotation: [number, number, number], overallScale: number, planetScale: number, cloudScale: number, cometScale: number, ringScale: number }> = {
     digital: { position: [0, 0, 0], rotation: [-9, 70, 0], overallScale: 1.0, planetScale: 1.0, cloudScale: 1.0, cometScale: 1.0, ringScale: 1.0 },
     lamp: { position: [0, -2, 0], rotation: [-9, 70, 0], overallScale: 1.0, planetScale: 1.0, cloudScale: 1.0, cometScale: 1.0, ringScale: 1.0 },
@@ -84,7 +102,7 @@ varying vec3 vWorldPos, vOriginalPos;
 varying vec2 vCustomUv;
 attribute vec3 aOriginalPos;
 uniform float uSliders[5], uTime, uHasDesertMap, uHasOceanMap, uIsArtifact;
-uniform float uIsForest, uIsRing;
+uniform float uIsForest, uIsRing, uIsLamp, uIsBaseMesh;
 uniform sampler2D uDesertMap, uOceanMap;
 uniform vec3 uDesertColor, uOceanColor;
 uniform int uIndices[8];
@@ -97,8 +115,10 @@ varying float vIsForest, vIsRing;
 varying vec3 vWorldPos, vOriginalPos;
 varying vec2 vCustomUv;
 uniform float uSliders[5], uTime, uHasDesertMap, uHasOceanMap, uIsArtifact;
+uniform float uIsForest, uIsRing, uIsLamp, uIsBaseMesh;
 uniform sampler2D uDesertMap, uOceanMap;
 uniform vec3 uDesertColor, uOceanColor;
+uniform vec3 uOceanGlow, uVolcanoGlow, uDesertGlow;
 uniform int uIndices[8];
 ${noisePars}
 ${getGrowthAlphaLogic}
@@ -112,8 +132,38 @@ float aF = getGrowthAlpha_planet(vOriginalPos, p2, iF);
 if (vIsForest > 0.5 && aF < 0.01) discard;
 
 #ifdef USE_COLOR
-    // Override the vertex colors multiplied by <color_fragment> to enforce pure material properties!
-    diffuseColor.rgb = diffuse;
+    diffuseColor.rgb = diffuse; // Default inherited color
+
+    // --- LAMP SOLID PLASTIC BIOMES ---
+    if (uIsLamp > 0.5) {
+        vec3 oceanColor = uOceanGlow;
+        if (uHasOceanMap > 0.5) {
+            vec3 tex = texture2D(uOceanMap, vCustomUv).rgb;
+            oceanColor = mix(oceanColor, tex, 0.6); // Blend rich image textures onto the plastic!
+        }
+
+        vec3 volcanoColor = uVolcanoGlow;
+        
+        vec3 desertColor = uDesertGlow;
+        if (uHasDesertMap > 0.5) {
+            vec3 tex = texture2D(uDesertMap, vCustomUv).rgb;
+            desertColor = mix(desertColor, tex, 0.7); // Apply physical sand ripples to the structure
+        }
+        
+        // Segment the Lamp surface cleanly into 3 fixed physical regions (Top-Left, Bottom, Right)
+        vec3 pos = normalize(vOriginalPos);
+        float sectO = smoothstep(0.0, 1.0, clamp(dot(pos, normalize(vec3(-0.5, 1.0, 0.0))), 0.0, 1.0)); // Blue Zone
+        float sectV = smoothstep(0.0, 1.0, clamp(dot(pos, vec3(0.0, -1.0, 0.0)), 0.0, 1.0));           // Red Zone
+        float sectD = smoothstep(0.0, 1.0, clamp(dot(pos, vec3(1.0, 0.0, 0.0)), 0.0, 1.0));            // Yellow Zone
+        
+        // Start with the user's explicit Base PLA Color (e.g., #733f3f) and paint the 3 bright biomes over it!
+        vec3 mixedColor = diffuseColor.rgb; 
+        mixedColor = mix(mixedColor, oceanColor, sectO * 0.95);
+        mixedColor = mix(mixedColor, volcanoColor, sectV * 0.95);
+        mixedColor = mix(mixedColor, desertColor, sectD * 0.95);
+        
+        diffuseColor.rgb = mixedColor;
+    }
 #endif
 `;
 
@@ -125,19 +175,27 @@ export const applyArtifactShader = (shader: any, uniforms: any) => {
     shader.uniforms.uHasDesertMap = uniforms.uHasDesertMap;
     shader.uniforms.uHasOceanMap = uniforms.uHasOceanMap;
     shader.uniforms.uIndices = uniforms.uIndices;
+    shader.uniforms.uIsLamp = uniforms.uIsLamp || { value: 0.0 };
+    shader.uniforms.uIsBaseMesh = uniforms.uIsBaseMesh || { value: 0.0 };
     shader.uniforms.uIsForest = { value: 0.0 };
     shader.uniforms.uIsRing = { value: 0.0 };
     shader.vertexShader = shader.vertexShader.replace('#include <common>', `#include <common>\n${sharedVertPars}`).replace('#include <begin_vertex>', `#include <begin_vertex>\nvCustomUv = uv; vOriginalPos = position; vIsForest = uIsForest; vIsRing = uIsRing;`);
 
     const customMorphLogic = `
-        float s1 = uSliders[0], s2 = uSliders[1];
-        float iV = (s1 < 0.5) ? (0.5 - s1) * 2.0 : 0.0, iO = (s1 > 0.5) ? (s1 - 0.5) * 2.0 : 0.0, iD = (s2 < 0.5) ? (0.5 - s2) * 2.0 : 0.0, iF = (s2 > 0.5) ? (s2 - 0.5) * 2.0 : 0.0;
-        vec3 p1 = vec3(0.0, 1.0, 0.0), p2 = vec3(0.8, -0.5, 0.3);
-        float aV = getGrowthAlpha_planet(transformed, p1, iV), aO = getGrowthAlpha_planet(transformed, p1, iO), aD = getGrowthAlpha_planet(transformed, p2, iD), aF = getGrowthAlpha_planet(transformed, p2, iF);
-        float maskD = aD*(1.0-aF), maskO = aO*(1.0-aV)*(1.0-aD)*(1.0-aF), maskV = aV*(1.0-aO)*(1.0-aD)*(1.0-aF);
         float mI[8]; for (int i=0; i<8; i++) mI[i] = 0.0;
-        for (int i=0; i<8; i++) { int t = uIndices[i]; if (t==0) mI[i]=maskD*1.8; else if (t==1) mI[i]=maskO*1.8; else if (t==2) mI[i]=maskV*1.8; else if (t==3) mI[i]=aF*1.8; }
-        ${THREE.ShaderChunk['morphtarget_vertex'].replace(/morphTargetInfluences/g, 'mI')}
+        
+        if (uIsBaseMesh > 0.5) {
+            float s1 = uSliders[0], s2 = uSliders[1];
+            float iV = (s1 < 0.5) ? (0.5 - s1) * 2.0 : 0.0, iO = (s1 > 0.5) ? (s1 - 0.5) * 2.0 : 0.0, iD = (s2 < 0.5) ? (0.5 - s2) * 2.0 : 0.0, iF = (s2 > 0.5) ? (s2 - 0.5) * 2.0 : 0.0;
+            vec3 p1 = vec3(0.0, 1.0, 0.0), p2 = vec3(0.8, -0.5, 0.3);
+            float aV = getGrowthAlpha_planet(transformed, p1, iV), aO = getGrowthAlpha_planet(transformed, p1, iO), aD = getGrowthAlpha_planet(transformed, p2, iD), aF = getGrowthAlpha_planet(transformed, p2, iF);
+            float maskD = aD*(1.0-aF), maskO = aO*(1.0-aV)*(1.0-aD)*(1.0-aF), maskV = aV*(1.0-aO)*(1.0-aD)*(1.0-aF);
+            for (int i=0; i<8; i++) { int t = uIndices[i]; if (t==0) mI[i]=maskD*1.8; else if (t==1) mI[i]=maskO*1.8; else if (t==2) mI[i]=maskV*1.8; else if (t==3) mI[i]=aF*1.8; }
+            ${THREE.ShaderChunk['morphtarget_vertex'].replace(/morphTargetInfluences/g, 'mI')}
+        } else {
+            ${THREE.ShaderChunk['morphtarget_vertex']} // Pass through raw influence arrays natively
+        }
+        
         vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
     `;
 
@@ -148,37 +206,71 @@ export const applyArtifactShader = (shader: any, uniforms: any) => {
 normal = normalize(cross(dFdx(vWorldPos), dFdy(vWorldPos)));
 nonPerturbedNormal = normal;
     `;
-    
+
+    const emissiveLogic = `
+#include <emissivemap_fragment>
+    `;
+
     shader.fragmentShader = shader.fragmentShader
         .replace('#include <common>', `#include <common>\n${sharedFragPars}`)
         .replace('#include <normal_fragment_begin>', normalLogic)
+        .replace('#include <emissivemap_fragment>', emissiveLogic)
         .replace('#include <color_fragment>', `#include <color_fragment>\n{${sharedFragLogic}}`);
 };
 
 // --- MATERIAL REGISTRY (EXPOSED) ---
+// IMPORTANT: You MUST Hard Refresh (F5 / Cmd+R) after tweaking these hex codes, as Next.js perfectly caches WebGL bindings!
 export const ARTIFACT_MATERIALS = {
-    lamp: new THREE.MeshPhysicalMaterial({ color: '#f5f5f5', roughness: 0.1, metalness: 0.1, transmission: 0.95, transparent: true, opacity: 1.0, ior: 1.5, thickness: 2.0 }), // Semitranslucent
+    lamp: new THREE.MeshStandardMaterial({ color: '#f8f8f8', roughness: 1.65, metalness: 0.1 }), // Warm matte PLA print (Base)
     necklace: new THREE.MeshStandardMaterial({ color: '#4a4a4b', roughness: 0.15, metalness: 0.95 }), // Dark silver
-    bracelet: new THREE.MeshStandardMaterial({ color: '#3d2b1f', roughness: 0.7, metalness: 0.0 }), // Dark wood
+    bracelet: new THREE.MeshStandardMaterial({ color: '#b76e79', roughness: 0.15, metalness: 1.0 }), // Rose Gold
     digital: new THREE.MeshStandardMaterial({ color: '#1a1a1c', roughness: 0.9, metalness: 0.0 })
 };
 
 interface ArtifactProps { values: number[]; materialOverride: string; }
 
 export const UnifiedArtifactRenderer: React.FC<ArtifactProps> = ({ values, materialOverride }) => {
+    const [loading, setLoading] = useState(true);
+
     return (
         <div style={{ width: '100%', height: '100%', position: 'relative' }}>
-            <Canvas camera={{ position: [0, 0, 18], fov: 45 }} frameloop="demand">
+            {loading && (
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10, background: 'rgba(0,0,0,0.15)' }}>
+                    <div style={{ color: 'rgba(255,255,255,0.9)', fontSize: '11px', fontFamily: 'monospace', letterSpacing: '2px', textTransform: 'uppercase' }}>
+                        Loading 3D...
+                    </div>
+                </div>
+            )}
+            <Canvas
+                camera={{ position: [0, 0, 18], fov: 45 }}
+                frameloop="demand"
+            >
                 <Suspense fallback={null}>
-                    <InnerArtifact values={values} materialOverride={materialOverride} />
+                    <InnerArtifact values={values} materialOverride={materialOverride} onLoaded={() => setLoading(false)} />
                 </Suspense>
             </Canvas>
         </div>
     );
 };
 
-const InnerArtifact: React.FC<ArtifactProps> = ({ values, materialOverride }) => {
+interface InnerArtifactProps extends ArtifactProps { onLoaded?: () => void; }
+
+const InnerArtifact: React.FC<InnerArtifactProps> = ({ values, materialOverride, onLoaded }) => {
     const trans = ARTIFACT_TRANSFORMS[materialOverride] || ARTIFACT_TRANSFORMS.digital;
+    const { gl, scene, camera } = useThree();
+
+    useEffect(() => {
+        // Once the FBX Suspense resolves, the component mounts.
+        // Force WebGL to compile the shader materials synchronously BEFORE showing the canvas.
+        gl.compile(scene, camera);
+
+        // Let the GPU flush the compiled programs and paint the first frame.
+        requestAnimationFrame(() => {
+            setTimeout(() => {
+                if (onLoaded) onLoaded();
+            }, 100);
+        });
+    }, [gl, scene, camera, onLoaded]);
 
     // Apply Global Offset:
     const finalPos: [number, number, number] = [
@@ -194,18 +286,87 @@ const InnerArtifact: React.FC<ArtifactProps> = ({ values, materialOverride }) =>
     const mS = trans.cometScale * master;
     const rS = trans.ringScale * master;
 
+    const isLamp = materialOverride === 'lamp';
+
     return (
-        <group position={finalPos} rotation={trans.rotation}>
-            <DisplacementSphere
-                values={values}
-                currentSection={4} // Final state
-                isStatic={true}
-                materialOverride={materialOverride}
-                planetScale={pS}
-                cloudScale={cS}
-                cometScale={mS}
-                ringScale={rS}
-            />
+        <group position={finalPos}>
+            {/* --- THE HALO: A 2D flat radial glow-board placed statically behind the 3D planet --- */}
+            {isLamp && (
+                <mesh scale={pS * HALO_SETTINGS.scaleMultiplier} position={[0, 0, -2]}>
+                    <planeGeometry args={[2, 2]} />
+                    <shaderMaterial
+                        key={`${HALO_SETTINGS.scaleMultiplier}-${HALO_SETTINGS.glowIntensity}-${HALO_SETTINGS.fresnelPower}-${HALO_SETTINGS.fresnelBias}`}
+                        transparent
+                        depthWrite={false}
+                        uniforms={{
+                            c: { value: HALO_SETTINGS.fresnelBias },
+                            p: { value: HALO_SETTINGS.fresnelPower },
+                            intensityMult: { value: HALO_SETTINGS.glowIntensity }
+                        }}
+                        vertexShader={`
+                            varying vec2 vUv;
+                            void main() {
+                                vUv = uv;
+                                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                            }
+                        `}
+                        fragmentShader={`
+                            uniform float c;
+                            uniform float p;
+                            uniform float intensityMult;
+                            varying vec2 vUv;
+                            
+                            void main() {
+                                // Screen Space Math: Map 0.0->1.0 to -1.0->1.0
+                                vec2 st = vUv * 2.0 - 1.0;
+                                
+                                // Radial Distance out from the center coordinate
+                                float dist = length(st);
+                                
+                                // Prevent drawing literal hard-square corners
+                                if (dist > 1.0) discard;
+                                
+                                // Calculate core radiant glow fading toward the edges. 'c' expands the inner core.
+                                float coreGlow = smoothstep(1.0, 0.0, dist / max(c, 0.01));
+                                
+                                // Generate Red/Blue/Yellow sectors evenly across the 360 circle
+                                vec2 dir = normalize(st);
+                                float aO = smoothstep(0.0, 1.0, clamp(dot(dir, normalize(vec2(-0.5, 1.0))), 0.0, 1.0)); // Blue Top-Left
+                                float aV = smoothstep(0.0, 1.0, clamp(dot(dir, vec2(0.0, -1.0)), 0.0, 1.0));           // Red Bottom
+                                float aD = smoothstep(0.0, 1.0, clamp(dot(dir, vec2(1.0, 0.0)), 0.0, 1.0));            // Yellow Right
+                                
+                                vec3 color = vec3(0.05, 0.05, 0.05); // Base ambient aura ring
+                                color = mix(color, vec3(0.0, 0.45, 1.0), aO * 1.5);
+                                color = mix(color, vec3(1.0, 0.15, 0.0), aV * 1.5);
+                                color = mix(color, vec3(1.0, 0.8, 0.0), aD * 1.5);
+                                
+                                // Mix the tri-color directly into pure white in the center
+                                vec3 finalColor = mix(color, vec3(1.0, 1.0, 1.0), coreGlow * c * 1.5);
+                                
+                                // Multiply intensity by coreGlow radius and apply global intensity
+                                float intensity = pow(coreGlow, max(p, 0.1)); 
+                                float finalAlpha = clamp(intensity * intensityMult, 0.0, 1.0);
+                                
+                                gl_FragColor = vec4(finalColor, finalAlpha);
+                            }
+                        `}
+                    />
+                </mesh>
+            )}
+
+            {/* --- THE PLANET: Actively rotated and spatially manipulated by ARTIFACT_TRANSFORMS --- */}
+            <group rotation={trans.rotation}>
+                <DisplacementSphere
+                    values={values}
+                    currentSection={4} // Final state
+                    isStatic={true}
+                    materialOverride={materialOverride}
+                    planetScale={pS}
+                    cloudScale={cS}
+                    cometScale={mS}
+                    ringScale={rS}
+                />
+            </group>
         </group>
     );
 };
