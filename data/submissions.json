@@ -235,5 +235,50 @@
     "type": "quiz_complete_v3",
     "timestamp": "2026-02-11T18:31:50.381Z",
     "receivedAt": "2026-02-11T18:31:50.389Z"
+  },
+  {
+    "id": "f25ac821-30a7-468b-ab8d-3be43731fcbc",
+    "userName": "Test User",
+    "userAge": "25",
+    "email": "test@example.com",
+    "assignments": {
+      "Agreeableness": "Q1",
+      "Extraversion": "Q2",
+      "Conscientiousness": "Q3",
+      "Openness": "Q4",
+      "Neuroticism": "Q5"
+    },
+    "selectedFormat": "artifact_1",
+    "estimatedPrice": 0,
+    "isWishlisted": true,
+    "quizResults": [
+      {
+        "questionId": "Q1",
+        "statement": "How empathetic are you?",
+        "score": 50
+      },
+      {
+        "questionId": "Q2",
+        "statement": "How sociable are you?",
+        "score": 50
+      },
+      {
+        "questionId": "Q3",
+        "statement": "How persistent are you?",
+        "score": 50
+      },
+      {
+        "questionId": "Q4",
+        "statement": "How curious are you?",
+        "score": 50
+      },
+      {
+        "questionId": "Q5",
+        "statement": "How relaxed are you?",
+        "score": 50
+      }
+    ],
+    "timestamp": "2026-03-26T12:40:47.978Z",
+    "receivedAt": "2026-03-26T12:40:48.159Z"
   }
 ]

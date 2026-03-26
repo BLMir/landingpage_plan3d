@@ -337,7 +337,7 @@ export default function WorldQuiz() {
 
     const handleEmailSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        setView('artifact');
+        handleSubmit();
     };
 
     const handleSubmit = async () => {
@@ -494,7 +494,7 @@ export default function WorldQuiz() {
                                     onClick={() => !isQuestionTransitioning && handleNextQuestion()}
                                     disabled={isQuestionTransitioning}
                                 >
-                                    {currentQuestionIndex === quizQuestions.length - 1 ? 'Finish' : 'Next question'} <ArrowRight />
+                                    {currentQuestionIndex === quizQuestions.length - 1 ? 'Next question' : 'Next question'} <ArrowRight />
                                 </button>
                             </div>
                         </div>
@@ -504,14 +504,19 @@ export default function WorldQuiz() {
                 {view === 'email' && (
                     <div className={styles.emailForm}>
                         <div className={styles.emailHeader}>
-                            <h2 className={styles.questionTitle}>We’ll let you know when it’s ready!</h2>
+                            <h2 className={styles.questionTitle}>Almost done!</h2>
+                            <p className={styles.emailSubtext}>
+                                We will let you know when we have your results + your planet ready!
+                            </p>
                         </div>
                         <div className={styles.emailBottom}>
                             <form onSubmit={handleEmailSubmit} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center' }}>
                                 <input type="text" required placeholder="Your Name" value={userName} onChange={(e) => setUserName(e.target.value)} className={styles.emailInput} />
                                 <input type="number" required placeholder="Age" value={userAge} onChange={(e) => setUserAge(e.target.value)} className={styles.emailInput} />
                                 <input type="email" required placeholder="enter@email.com" value={email} onChange={(e) => setEmail(e.target.value)} className={styles.emailInput} />
-                                <button type="submit" className={styles.continueBtn}>Save your planet</button>
+                                <button type="submit" className={styles.continueBtn} disabled={submitting}>
+                                    {submitting ? 'Transmitting...' : 'Save your Planet'}
+                                </button>
                             </form>
                         </div>
                     </div>
@@ -582,17 +587,29 @@ export default function WorldQuiz() {
                             })}
                         </div>
 
-                        <button onClick={handleSubmit} className={styles.continueBtn} disabled={submitting}>
-                            {submitting ? 'Transmitting...' : 'Receive Transmission'}
-                        </button>
+                        <div className={styles.quizNavigationButtons}>
+                            <button
+                                className={styles.navControlBtn}
+                                onClick={() => setView('quiz')}
+                            >
+                                <ArrowLeft /> Back
+                            </button>
+                            <button
+                                className={`${styles.navControlBtn} ${styles.primary}`}
+                                onClick={() => setView('email')}
+                                disabled={submitting}
+                            >
+                                {submitting ? 'Transmitting...' : 'Finish'} <ArrowRight />
+                            </button>
+                        </div>
                     </div>
                 )}
 
                 {view === 'success' && (
                     <div className={styles.successMessage}>
                         <span className={styles.successIcon}>✨</span>
-                        <h2 className={styles.questionTitle}>Transmission Received</h2>
-                        <p className={styles.optionDesc}>Check your inbox to continue your journey.</p>
+                        <h2 className={styles.questionTitle}>Thanks, Transmission Received!</h2>
+                        <p className={styles.optionDesc}>We will send you an email with your planet when is ready!</p>
                     </div>
                 )}
             </div>
