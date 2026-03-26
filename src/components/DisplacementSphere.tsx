@@ -1083,6 +1083,8 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
                 (m as any).color.copy(sourceMat.color);
                 (m as any).roughness = sourceMat.roughness;
                 (m as any).metalness = sourceMat.metalness;
+                (m as any).transparent = sourceMat.transparent; 
+                (m as any).opacity = sourceMat.opacity;
                 m.needsUpdate = true; // Force WebGL pipeline recompilation for HMR
             }
         });

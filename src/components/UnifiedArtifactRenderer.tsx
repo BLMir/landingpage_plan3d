@@ -8,13 +8,17 @@ import { MeshStandardMaterial } from 'three';
 export const GLOBAL_POSITION_OFFSET: [number, number, number] = [0, 0, 0]; // Bulk shift for all 4 slots
 export const GLOBAL_SCALE_MULTIPLIER: number = 1.0; // Global master scale for everything
 
-// --- HALO AURA SETTINGS ---
-// Note: Use a hard refresh (Cmd+R) after changing Material constants to clear the Next.js WebGL cache!
+// --- HALO AURA SETTINGS (EXPOSED) ---
+// Detailed control objects for the 2D radial glow backdrop.
 export const HALO_SETTINGS = {
-    scaleMultiplier: 7.65,  // Overall 2D screen scale of the Halo backdrop!
-    glowIntensity: 2.8,     // Brightness multiplier
-    fresnelPower: 2.0,      // Sharpness/Falloff rate of the glow (higher = thinner aura)
-    fresnelBias: 1.2        // The absolute Radius/Stretch of the inner white core
+    scaleMultiplier: 10.65,    // [Overall Size] Scale of the 2D plane backdrop.
+    glowIntensity: 1.8,       // [Brightness] Global intensity multiplier for the whole aura.
+    fresnelPower: 2.2,        // [Falloff/Blur] Sharpness of the outer rim. (Higher = thinner aura, Lower = massive blurred glow).
+    fresnelBias: 1.0,         // [Core Radius] How far outward the white-hot center stretches. 
+    colorBlur: 1,          // [Color Blur] How much the Red/Blue/Yellow sectors bleed into each other. (Higher = more blurred/mixed colors).
+    colorIntensity: 1.0,      // [Saturate] Strength/Saturation of the 3 color sectors.
+    shapeSquash: 1.0,         // [Shape] Vertical vs Horizontal stretch. (1.0 = Circle, 0.5 = Tall Oval, 2.0 = Wide Oval).
+    coreWhiteFactor: 0.8      // [Inner White] Intensity of the pure white glow in the very center.
 };
 
 // --- LAMP BASE COLORS (EXPOSED) ---
@@ -27,7 +31,7 @@ export const LAMP_BIOME_COLORS = {
 
 export const ARTIFACT_TRANSFORMS: Record<string, { position: [number, number, number], rotation: [number, number, number], overallScale: number, planetScale: number, cloudScale: number, cometScale: number, ringScale: number }> = {
     digital: { position: [0, 0, 0], rotation: [-9, 70, 0], overallScale: 1.0, planetScale: 1.0, cloudScale: 1.0, cometScale: 1.0, ringScale: 1.0 },
-    lamp: { position: [0, -2, 0], rotation: [-9, 70, 0], overallScale: 1.0, planetScale: 1.0, cloudScale: 1.0, cometScale: 1.0, ringScale: 1.0 },
+    lamp: { position: [0, -1.4, 0], rotation: [-9, 70, 0], overallScale: 1.03, planetScale: 1.0, cloudScale: 1.0, cometScale: 1.0, ringScale: 1.0 },
     necklace: { position: [-0.75, -3, 0], rotation: [-9, 70, 0], overallScale: 0.9, planetScale: 1.0, cloudScale: 1.05, cometScale: 1.05, ringScale: 1.05 },
     bracelet: { position: [0, -4.1, 0], rotation: [-9, 70, 0], overallScale: 0.7, planetScale: 1.0, cloudScale: 1.2, cometScale: 1.15, ringScale: 1.2 }
 };
@@ -153,7 +157,7 @@ if (vIsForest > 0.5 && aF < 0.01) discard;
         // Segment the Lamp surface cleanly into 3 fixed physical regions (Top-Left, Bottom, Right)
         vec3 pos = normalize(vOriginalPos);
         float sectO = smoothstep(0.0, 1.0, clamp(dot(pos, normalize(vec3(-0.5, 1.0, 0.0))), 0.0, 1.0)); // Blue Zone
-        float sectV = smoothstep(0.0, 1.0, clamp(dot(pos, vec3(0.0, -1.0, 0.0)), 0.0, 1.0));           // Red Zone
+        float sectV = smoothstep(-0.2, 0.8, clamp(dot(pos, normalize(vec3(0.0, -0.6, 0.8))), 0.0, 1.0)); // Red Zone (Front-Bottom)
         float sectD = smoothstep(0.0, 1.0, clamp(dot(pos, vec3(1.0, 0.0, 0.0)), 0.0, 1.0));            // Yellow Zone
         
         // Start with the user's explicit Base PLA Color (e.g., #733f3f) and paint the 3 bright biomes over it!
@@ -221,10 +225,10 @@ nonPerturbedNormal = normal;
 // --- MATERIAL REGISTRY (EXPOSED) ---
 // IMPORTANT: You MUST Hard Refresh (F5 / Cmd+R) after tweaking these hex codes, as Next.js perfectly caches WebGL bindings!
 export const ARTIFACT_MATERIALS = {
-    lamp: new THREE.MeshStandardMaterial({ color: '#f8f8f8', roughness: 1.65, metalness: 0.1 }), // Warm matte PLA print (Base)
-    necklace: new THREE.MeshStandardMaterial({ color: '#4a4a4b', roughness: 0.15, metalness: 0.95 }), // Dark silver
-    bracelet: new THREE.MeshStandardMaterial({ color: '#b76e79', roughness: 0.15, metalness: 1.0 }), // Rose Gold
-    digital: new THREE.MeshStandardMaterial({ color: '#1a1a1c', roughness: 0.9, metalness: 0.0 })
+    lamp: new THREE.MeshStandardMaterial({ color: '#f8f8f8', roughness: 1.65, metalness: 0.1, transparent: true, opacity: 0.5 }), // Warm matte PLA print (Base)
+    necklace: new THREE.MeshStandardMaterial({ color: '#4a4a4b', roughness: 0.15, metalness: 0.95, transparent: true, opacity: 1.0 }), // Dark silver
+    bracelet: new THREE.MeshStandardMaterial({ color: '#b76e79', roughness: 0.15, metalness: 1.0, transparent: true, opacity: 1.0 }), // Rose Gold
+    digital: new THREE.MeshStandardMaterial({ color: '#1a1a1c', roughness: 0.9, metalness: 0.0, transparent: true, opacity: 1.0 })
 };
 
 interface ArtifactProps { values: number[]; materialOverride: string; }
@@ -295,13 +299,17 @@ const InnerArtifact: React.FC<InnerArtifactProps> = ({ values, materialOverride,
                 <mesh scale={pS * HALO_SETTINGS.scaleMultiplier} position={[0, 0, -2]}>
                     <planeGeometry args={[2, 2]} />
                     <shaderMaterial
-                        key={`${HALO_SETTINGS.scaleMultiplier}-${HALO_SETTINGS.glowIntensity}-${HALO_SETTINGS.fresnelPower}-${HALO_SETTINGS.fresnelBias}`}
+                        key={`${HALO_SETTINGS.scaleMultiplier}-${HALO_SETTINGS.glowIntensity}-${HALO_SETTINGS.fresnelPower}-${HALO_SETTINGS.fresnelBias}-${HALO_SETTINGS.colorBlur}-${HALO_SETTINGS.colorIntensity}-${HALO_SETTINGS.shapeSquash}-${HALO_SETTINGS.coreWhiteFactor}`}
                         transparent
                         depthWrite={false}
                         uniforms={{
                             c: { value: HALO_SETTINGS.fresnelBias },
                             p: { value: HALO_SETTINGS.fresnelPower },
-                            intensityMult: { value: HALO_SETTINGS.glowIntensity }
+                            intensityMult: { value: HALO_SETTINGS.glowIntensity },
+                            colorBlur: { value: HALO_SETTINGS.colorBlur },
+                            colorStrength: { value: HALO_SETTINGS.colorIntensity },
+                            squash: { value: HALO_SETTINGS.shapeSquash },
+                            whiteFactor: { value: HALO_SETTINGS.coreWhiteFactor }
                         }}
                         vertexShader={`
                             varying vec2 vUv;
@@ -311,14 +319,21 @@ const InnerArtifact: React.FC<InnerArtifactProps> = ({ values, materialOverride,
                             }
                         `}
                         fragmentShader={`
-                            uniform float c;
+                             uniform float c;
                             uniform float p;
                             uniform float intensityMult;
+                            uniform float colorBlur;
+                            uniform float colorStrength;
+                            uniform float squash;
+                            uniform float whiteFactor;
                             varying vec2 vUv;
                             
                             void main() {
                                 // Screen Space Math: Map 0.0->1.0 to -1.0->1.0
                                 vec2 st = vUv * 2.0 - 1.0;
+                                
+                                // Apply Shape Deformation (Squash/Stretch)
+                                st.x *= 1.0 / max(squash, 0.01); 
                                 
                                 // Radial Distance out from the center coordinate
                                 float dist = length(st);
@@ -326,22 +341,25 @@ const InnerArtifact: React.FC<InnerArtifactProps> = ({ values, materialOverride,
                                 // Prevent drawing literal hard-square corners
                                 if (dist > 1.0) discard;
                                 
+                                // Safe Directional Vector for color segmentation (Add epsilon to avoid center artifacts)
+                                vec2 dir = st / (dist + 0.0001);
+                                
                                 // Calculate core radiant glow fading toward the edges. 'c' expands the inner core.
                                 float coreGlow = smoothstep(1.0, 0.0, dist / max(c, 0.01));
                                 
-                                // Generate Red/Blue/Yellow sectors evenly across the 360 circle
-                                vec2 dir = normalize(st);
-                                float aO = smoothstep(0.0, 1.0, clamp(dot(dir, normalize(vec2(-0.5, 1.0))), 0.0, 1.0)); // Blue Top-Left
-                                float aV = smoothstep(0.0, 1.0, clamp(dot(dir, vec2(0.0, -1.0)), 0.0, 1.0));           // Red Bottom
-                                float aD = smoothstep(0.0, 1.0, clamp(dot(dir, vec2(1.0, 0.0)), 0.0, 1.0));            // Yellow Right
+                                // Generate Red/Blue/Yellow sectors with dynamically blurred transitions
+                                float blurWidth = 1.0 - colorBlur; 
+                                float aO = smoothstep(-1.0 + blurWidth, 0.8, clamp(dot(dir, normalize(vec2(-0.5, 1.0))), 0.0, 1.0)); // Blue Top-Left
+                                float aV = smoothstep(-1.0 + blurWidth, 0.8, clamp(dot(dir, normalize(vec2(0.0, -0.8))), 0.0, 1.0)); // Red Bottom
+                                float aD = smoothstep(-1.0 + blurWidth, 0.8, clamp(dot(dir, vec2(1.0, 0.0)), 0.0, 1.0));            // Yellow Right
                                 
-                                vec3 color = vec3(0.05, 0.05, 0.05); // Base ambient aura ring
-                                color = mix(color, vec3(0.0, 0.45, 1.0), aO * 1.5);
-                                color = mix(color, vec3(1.0, 0.15, 0.0), aV * 1.5);
-                                color = mix(color, vec3(1.0, 0.8, 0.0), aD * 1.5);
+                                vec3 color = vec3(0.1, 0.1, 0.1); // Base ambient aura
+                                color = mix(color, vec3(0.0, 0.45, 1.0), aO * colorStrength);
+                                color = mix(color, vec3(1.0, 0.05, 0.0), aV * colorStrength); 
+                                color = mix(color, vec3(1.0, 0.8, 0.0), aD * colorStrength);
                                 
                                 // Mix the tri-color directly into pure white in the center
-                                vec3 finalColor = mix(color, vec3(1.0, 1.0, 1.0), coreGlow * c * 1.5);
+                                vec3 finalColor = mix(color, vec3(1.0, 1.0, 1.0), coreGlow * c * whiteFactor);
                                 
                                 // Multiply intensity by coreGlow radius and apply global intensity
                                 float intensity = pow(coreGlow, max(p, 0.1)); 
