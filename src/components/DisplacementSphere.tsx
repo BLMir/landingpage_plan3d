@@ -7,7 +7,7 @@ import { getAssetPath } from '@/utils/paths';
 
 // Preload to avoid waterfalls
 useGLTF.preload(getAssetPath('/models/forest.glb'));
-useGLTF.preload(getAssetPath('/models/comet_single.glb'));
+useFBX.preload(getAssetPath('/models/Comets.fbx'));
 
 // --- SHADER HELPERS ---
 const noisePars = `
@@ -470,10 +470,10 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
     cloudScale = 1.0,
     cometScale = 1.0,
     ringScale = 1.0,
-    cometSizeMultiplier = 2.0 // Jumbo size (1.0 = original)
+    cometSizeMultiplier = 1.0 // Jumbo size (1.0 = original)
 }) => {
     const base = useFBX(getAssetPath('/models/base.fbx'));
-    const { scene: cometTemplateScene } = useGLTF(getAssetPath('/models/comet_single.glb'));
+    const cometsFBX = useFBX(getAssetPath('/models/Comets.fbx'));
     // FOREST GLTF (Keep loading it to avoid errors, but don't use it yet)
     useGLTF.preload(getAssetPath('/models/forest.glb'));
     const forestGLTF = useGLTF(getAssetPath('/models/forest.glb'));
@@ -599,9 +599,7 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
                 depthWrite: true
             }),
             Comet_optimized_1: new THREE.ShaderMaterial({
-                uniforms: {
-                    uTime: { value: 0 }
-                },
+                uniforms: { uTime: { value: 0 } },
                 vertexShader: `
                     #include <morphtarget_pars_vertex>
                     varying vec2 vUv;
@@ -623,10 +621,7 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
                 morphTargets: true
             }),
             Comet_optimized_2: new THREE.ShaderMaterial({
-                uniforms: {
-                    uTime: { value: 0 },
-                    uMagmaTex: { value: magmaTex }
-                },
+                uniforms: { uTime: { value: 0 } },
                 vertexShader: `
                     #include <morphtarget_pars_vertex>
                     varying vec2 vUv;
@@ -639,46 +634,139 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
                         vPos = transformed;
                     }
                 `,
-                fragmentShader: `
-                    precision highp float;
-                    uniform float uTime;
+                fragmentShader: cometFragmentShader,
+                transparent: true,
+                side: THREE.DoubleSide,
+                depthTest: true,
+                depthWrite: true,
+                // @ts-ignore
+                morphTargets: true
+            }),
+            Comet_optimized_3: new THREE.ShaderMaterial({
+                uniforms: { uTime: { value: 0 } },
+                vertexShader: `
+                    #include <morphtarget_pars_vertex>
                     varying vec2 vUv;
                     varying vec3 vPos;
-                    
-                    ${noisePars}
-                    
                     void main() {
-                        // Large Scale Texture (Lower Tiling for zoom effect)
-                        vec2 tiledUv = vUv * 3.0; 
-                        
-                        // Broader volcan-style ridges for smoother rivers
-                        float noiseFlow = snoise(vec3(tiledUv * 1.0, uTime * 0.15));
-                        float ridges = 1.0 - abs(noiseFlow); 
-                        float river = smoothstep(0.7, 0.9, ridges);
-                        
-                        // Rocky logic: adjusted frequency for larger scale
-                        float rockyNoise = snoise(vec3(tiledUv * 3.0, uTime * 0.05)) * 0.5 + 0.5;
-                        rockyNoise = pow(rockyNoise, 2.5); 
-                        
-                        // Pulse logic
-                        float pulseN = snoise(vPos * 0.3 + vec3(uTime * 1.5)) * 0.5 + 0.5;
-                        
-                        // Vibrant Orange/Gold Palette
-                        vec3 crustOrange = vec3(0.65, 0.2, 0.0) * (0.3 + 0.7 * rockyNoise);
-                        vec3 vibrantOrange = vec3(1.8, 0.45, 0.0); // Hot orange
-                        vec3 goldenOrange = vec3(2.5, 1.5, 0.1);  // Emissive gold/orange
-                        
-                        vec3 magmaMix = mix(crustOrange, vibrantOrange, river);
-                        magmaMix = mix(magmaMix, goldenOrange, smoothstep(0.85, 1.0, ridges) * pulseN);
-                        
-                        // Final Intensity Boost
-                        magmaMix *= (1.0 + river * 0.8); 
-                        
-                        // Breathing glow
-                        float breathing = 0.9 + 0.1 * sin(uTime * 3.0 + vUv.x * 20.0);
-                        gl_FragColor = vec4(magmaMix * breathing, 1.0);
+                        vUv = uv;
+                        #include <begin_vertex>
+                        #include <morphtarget_vertex>
+                        #include <project_vertex>
+                        vPos = transformed;
                     }
                 `,
+                fragmentShader: cometFragmentShader,
+                transparent: true,
+                side: THREE.DoubleSide,
+                depthTest: true,
+                depthWrite: true,
+                // @ts-ignore
+                morphTargets: true
+            }),
+            Comet_optimized_4: new THREE.ShaderMaterial({
+                uniforms: { uTime: { value: 0 } },
+                vertexShader: `
+                    #include <morphtarget_pars_vertex>
+                    varying vec2 vUv;
+                    varying vec3 vPos;
+                    void main() {
+                        vUv = uv;
+                        #include <begin_vertex>
+                        #include <morphtarget_vertex>
+                        #include <project_vertex>
+                        vPos = transformed;
+                    }
+                `,
+                fragmentShader: cometFragmentShader,
+                transparent: true,
+                side: THREE.DoubleSide,
+                depthTest: true,
+                depthWrite: true,
+                // @ts-ignore
+                morphTargets: true
+            }),
+            Comet_optimized_5: new THREE.ShaderMaterial({
+                uniforms: { uTime: { value: 0 } },
+                vertexShader: `
+                    #include <morphtarget_pars_vertex>
+                    varying vec2 vUv;
+                    varying vec3 vPos;
+                    void main() {
+                        vUv = uv;
+                        #include <begin_vertex>
+                        #include <morphtarget_vertex>
+                        #include <project_vertex>
+                        vPos = transformed;
+                    }
+                `,
+                fragmentShader: cometFragmentShader,
+                transparent: true,
+                side: THREE.DoubleSide,
+                depthTest: true,
+                depthWrite: true,
+                // @ts-ignore
+                morphTargets: true
+            }),
+            Comet_optimized_6: new THREE.ShaderMaterial({
+                uniforms: { uTime: { value: 0 } },
+                vertexShader: `
+                    #include <morphtarget_pars_vertex>
+                    varying vec2 vUv;
+                    varying vec3 vPos;
+                    void main() {
+                        vUv = uv;
+                        #include <begin_vertex>
+                        #include <morphtarget_vertex>
+                        #include <project_vertex>
+                        vPos = transformed;
+                    }
+                `,
+                fragmentShader: cometFragmentShader,
+                transparent: true,
+                side: THREE.DoubleSide,
+                depthTest: true,
+                depthWrite: true,
+                // @ts-ignore
+                morphTargets: true
+            }),
+            Comet_optimized_7: new THREE.ShaderMaterial({
+                uniforms: { uTime: { value: 0 } },
+                vertexShader: `
+                    #include <morphtarget_pars_vertex>
+                    varying vec2 vUv;
+                    varying vec3 vPos;
+                    void main() {
+                        vUv = uv;
+                        #include <begin_vertex>
+                        #include <morphtarget_vertex>
+                        #include <project_vertex>
+                        vPos = transformed;
+                    }
+                `,
+                fragmentShader: cometFragmentShader,
+                transparent: true,
+                side: THREE.DoubleSide,
+                depthTest: true,
+                depthWrite: true,
+                // @ts-ignore
+                morphTargets: true
+            }),
+            Comet_optimized_8: new THREE.ShaderMaterial({
+                uniforms: { uTime: { value: 0 } },
+                vertexShader: `
+                    #include <morphtarget_pars_vertex>
+                    varying vec2 vUv;
+                    varying vec3 vPos;
+                    void main() {
+                        vUv = uv;
+                        #include <begin_vertex>
+                        #include <morphtarget_vertex>
+                        #include <project_vertex>
+                        vPos = transformed;
+                    }
+                `,
+                fragmentShader: cometFragmentShader,
                 transparent: true,
                 side: THREE.DoubleSide,
                 depthTest: true,
@@ -743,110 +831,30 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
     }, [forestGLTF]);
 
 
-    const cometInstances = useMemo(() => {
-        const instances: THREE.Group[] = [];
-        const count = 50; // High resolution for maximum separation
-        const radius = 18.0;
+    const cometsClone = useMemo(() => {
+        const group = cometsFBX.clone();
 
-        // Seeded RNG for 100% parity across all 4 artifact renders
-        let seed = 1234.5;
-        const rng = () => {
-            const x = Math.sin(seed++) * 10000;
-            return x - Math.floor(x);
-        };
-
-        // Arrays for initialization:
-        const magmaRadii = [23.5, 23.5, 23.5];
-        const magmaElevations = [
-            Math.PI / 2.1,  // ~85 deg (Pole)
-            Math.PI / 4.0,  // ~45 deg (Mid-Northern)
-            Math.PI / 8.0   // ~22 deg (Lower-Northern)
-        ];
-        const magmaAngles = [
-            (10 * Math.PI / 180),        // 10 deg
-            (130 * Math.PI / 180),       // 130 deg
-            (250 * Math.PI / 180)        // 250 deg
-        ];
-
-        // Synchronous Initial State for Artifacts (Demand Frameloop)
-        const curiousValue = values[3] || 50;
-        let cometCount = 0;
-        let targetMeshTag = "optimized_1";
-        if (curiousValue >= 50.1) {
-            targetMeshTag = "optimized_1";
-            // Scale from 2 (at 51%) up to 5 (at 100%)
-            cometCount = 2 + Math.floor(((curiousValue - 50.1) / 49.9) * 3.99);
-        } else if (curiousValue <= 49.9) {
-            targetMeshTag = "optimized_2";
-            cometCount = Math.max(1, 1 + Math.floor(((49.9 - curiousValue) / 50.0) * 2.99));
-        }
-
-        for (let i = 0; i < count; i++) {
-            const group = cometTemplateScene.clone();
-
-            // 0. Identity Reset & Unit Normalization
-            group.traverse((node: any) => {
-                if (node.scale) node.scale.set(1, 1, 1);
-            });
-
-            // 1. STANDARD POSITION (BLUE) - Lane-Locked distribution
-            // Pre-calculate 5 explicit lanes for indices (5, 15, 25, 35, 45) to ensure zero intersection.
-            let y = 1 - (i / (count - 1)) * 2; // Default Fibonacci
-            let phi_fib = Math.PI * (3 - Math.sqrt(5)) * (i + 1); // Default Golden Angle
-
-            // Lane assignment for the 5 Jumbo Blue comets:
-            const blueSpots = [5, 15, 25, 35, 45];
-            const spotIdx = blueSpots.indexOf(i);
-            if (spotIdx !== -1) {
-                // EXPLICIT LANES: [North, Mid-North, Equator, Mid-South, South]
-                // Spread latitudes by 0.35 - 0.45 units Y to guarantee zero overlap with Jumbo scale.
-                const yLanes = [0.75, 0.40, 0.05, -0.35, -0.75]; // Latitude bands
-                const pLanes = [0, 1.25, 2.50, 3.75, 5.0]; // Longitude spread
-                y = yLanes[spotIdx];
-                phi_fib = pLanes[spotIdx] + (curiousValue * 0.005); // Initial seed + interaction
+        // 1. IDENTITY & UNIT NORMALIZATION:
+        group.traverse((node: any) => {
+            // Remove node.scale.set(1,1,1) to preserve FBX baked scales
+            if (node.isMesh) {
+                const mesh = node as THREE.Mesh;
+                mesh.visible = false; // Hide initially
+                // Initialize in hidden state (morph influence 1.0)
+                if (mesh.morphTargetInfluences && mesh.morphTargetDictionary) {
+                    const idx = mesh.morphTargetDictionary['high'];
+                    if (idx !== undefined) mesh.morphTargetInfluences[idx] = 1.0;
+                }
             }
+        });
 
-            const r_lat = Math.sqrt(Math.max(0, 1 - y * y));
-            const standardPos = new THREE.Vector3(
-                r_lat * Math.cos(phi_fib) * radius,
-                y * radius,
-                r_lat * Math.sin(phi_fib) * radius
-            );
+        // 2. CENTRALIZED ROOT MULTIPLIER:
+        group.position.set(0, 0, 0);
+        group.rotation.set(0, 0, 0);
+        group.scale.set(100, 100, 100);
 
-            // 2. MAGMA Logic:
-            // Restore legacy fixed coordinates for the first 3 comets (Optimized 2).
-            let magmaPos = standardPos.clone();
-            if (i < 3) {
-                const r = magmaRadii[i];
-                const elev = magmaElevations[i];
-                const ang = magmaAngles[i];
-                const hR = r * Math.cos(elev);
-                magmaPos.set(
-                    hR * Math.cos(ang),
-                    r * Math.sin(elev),
-                    hR * Math.sin(ang)
-                );
-            }
-
-            // 3. SYNCHRONOUS ORIENTATION:
-            group.position.copy(magmaPos);
-            if (i < 3) {
-                // Legacy Radial Orientation for Magma
-                group.lookAt(0, 30, 0);
-            } else {
-                // New Tangential Orientation for Blue (Anti-Intersection)
-                const forward = new THREE.Vector3().crossVectors(magmaPos, new THREE.Vector3(190, 100, 290)).normalize();
-                group.lookAt(magmaPos.clone().add(forward));
-            }
-
-            group.userData.standardPos = standardPos;
-            group.userData.magmaPos = magmaPos;
-            group.userData.orientation = group.quaternion.clone();
-
-            instances.push(group);
-        }
-        return instances;
-    }, [cometTemplateScene]); // Removed values/currentSection to prevent expensive rebuilds during interaction.
+        return group;
+    }, [cometsFBX]);
 
 
 
@@ -890,7 +898,7 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
     }, [ringGroup]);
 
     const customUniforms = useRef({
-        uSliders: { value: [0.0, 0.0, 0.0, 0.0, 0.5, 0.5, 0.5] },
+        uSliders: { value: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] },
         uTime: { value: 0 },
         uDesertMap: { value: null as THREE.Texture | null },
         uOceanMap: { value: null as THREE.Texture | null },
@@ -944,7 +952,8 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
                         uOceanGlow: { value: new THREE.Color(lampColors?.ocean.r ?? 0.05, lampColors?.ocean.g ?? 0.35, lampColors?.ocean.b ?? 0.85) },
                         uVolcanoGlow: { value: new THREE.Color(lampColors?.volcano.r ?? 0.85, lampColors?.volcano.g ?? 0.15, lampColors?.volcano.b ?? 0.05) },
                         uDesertGlow: { value: new THREE.Color(lampColors?.desert.r ?? 0.9, lampColors?.desert.g ?? 0.7, lampColors?.desert.b ?? 0.15) },
-                        uIsLamp: { value: materialOverride === 'lamp' ? 1.0 : 0.0 }
+                        uIsLamp: { value: materialOverride === 'lamp' ? 1.0 : 0.0 },
+                        uIsThemed: { value: (materialOverride && materialOverride !== 'digital') ? 1.0 : 0.0 }
                     });
                     sh.uniforms.uIsForest.value = isF;
                     sh.uniforms.uIsRing.value = isR;
@@ -1006,8 +1015,8 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
 
     const cloudMeshCache = useMemo(() => {
         const meshes: THREE.Mesh[] = [];
-        cloudsFBX.traverse((child) => {
-            if ((child as THREE.Mesh).isMesh) {
+        cloudsFBX.traverse((child: any) => {
+            if (child.isMesh) {
                 meshes.push(child as THREE.Mesh);
             }
         });
@@ -1015,8 +1024,20 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
     }, [cloudsFBX]);
 
     const cometMeshCache = useMemo(() => {
-        return cometInstances;
-    }, [cometInstances]);
+        const meshes: THREE.Mesh[] = [];
+        cometsClone.traverse((child: any) => {
+            if (child.isMesh) {
+                meshes.push(child as THREE.Mesh);
+            }
+        });
+        // Sort meshes by optimized ID to ensure deterministic idx mapping
+        // e.g. "optimized_1" -> index 0, "optimized_2" -> index 1
+        return meshes.sort((a, b) => {
+            const numA = parseInt(a.name.match(/\d+/)?.toString() || "0");
+            const numB = parseInt(b.name.match(/\d+/)?.toString() || "0");
+            return numA - numB;
+        });
+    }, [cometsClone]);
 
     // Removed useEffect for Forest Geometry
 
@@ -1642,7 +1663,7 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
                     }
                 }
 
-        const matsToUpdate = (child.material as any).isMaterial ? [child.material] : [];
+                const matsToUpdate = (child.material as any).isMaterial ? [child.material] : [];
                 matsToUpdate.forEach((m: any) => {
                     const sh = (m as any).userData?.shader || (m.type === 'ShaderMaterial' ? (m as any) : null);
                     if (sh && sh.uniforms) {
@@ -1736,92 +1757,62 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
 
         // --- Comet logic ---
         if (cometRef.current) {
-            const curiousValue = values[5] || 0;
 
-            let cometCount = 0;
-            let cometMat = ringMaterials.Comet_optimized_1;
-            let targetMeshTag = "optimized_1";
-            let vCometScale = 35;
+            const cometMapping: Record<string, number[]> = {
+                'optimized_1': [0.00, 0.15],
+                'optimized_2': [0.10, 0.30],
+                'optimized_3': [0.20, 0.45],
+                'optimized_4': [0.35, 0.60],
+                'optimized_5': [0.50, 0.75],
+                'optimized_6': [0.65, 0.85],
+                'optimized_7': [0.75, 0.95],
+                'optimized_8': [0.85, 1.00]
+            };
 
-            if (curiousValue >= 50.1) { // High Curiosity: Blue Comets
-                cometMat = ringMaterials.Comet_optimized_1;
-                targetMeshTag = "optimized_1";
-                vCometScale = 49;
-                // Scale from 2 (at 51%) up to 5 (at 100%)
-                cometCount = 2 + Math.floor(((curiousValue - 50.1) / 49.9) * 3.99);
-            } else if (curiousValue <= 49.9) { // Low Curiosity: Magma Comets
-                cometMat = ringMaterials.Comet_optimized_2;
-                targetMeshTag = "optimized_2";
-                vCometScale = 110;
-                // 49.9% -> 1, 0% -> 3
-                cometCount = Math.max(1, 1 + Math.floor(((49.9 - curiousValue) / 50.0) * 2.99));
-            } else {
-                cometCount = 0; // Exactly 0 at 50% threshold
-            }
+            if (cometMeshCache.length > 0) {
+                const curiousValue = values[5] || 0;
+                const pVal = curiousValue / 100;
 
-            cometMeshCache.forEach((group, idx) => {
-                // Magma (Optimized 2) uses fixed indices 0, 1, 2.
-                let finalIdx = idx;
-                if (curiousValue >= 50.1) {
-                    // Blue (Optimized 1) uses a 10-step gap starting at 5
-                    finalIdx = idx * 10 + 5;
-                }
+                const isCometSection = currentSection >= 5;
+                cometMeshCache.forEach((mesh, idx) => {
+                    // Mesh 1 through 8 (indices 0 to 7) are addressed sequentially
+                    if (idx < 8 && isCometSection) {
+                        const tag = `optimized_${idx + 1}`;
+                        const interval = cometMapping[tag];
+                        const [start, end] = interval;
+                        const growth = Math.min(1.0, Math.max(0.0, (pVal - start) / (end - start)));
+                        const influence = 1.0 - growth;
 
-                const isGroupVisible = (!!materialOverride || currentSection >= 5) && idx < cometCount;
-                group.visible = isGroupVisible;
+                        mesh.visible = growth > 0.001;
 
-                if (isGroupVisible) {
-                    // Pull position from the disjoint Fibonacci spot
-                    const targetInstance = cometInstances[finalIdx] || group;
-                    const posToUse = targetInstance.userData.magmaPos || targetInstance.userData.standardPos;
-                    if (posToUse) group.position.copy(posToUse);
+                        if (mesh.visible) {
+                            const indexValue = idx + 1;
+                            const isMagmaTarget = indexValue === 2 || indexValue === 6 || indexValue === 8;
+                            const materialKey = `Comet_optimized_${indexValue}`;
+                            const cometMat = isMagmaTarget ? ringMaterials.magma : (ringMaterials as any)[materialKey];
 
-                    // Use PRE-CALCULATED Orientation from that spot
-                    if (targetInstance.userData.orientation) {
-                        group.quaternion.copy(targetInstance.userData.orientation);
-                    }
-                    group.traverse((child) => {
-                        const mesh = child as THREE.Mesh;
-                        if (mesh.isMesh) {
-                            // Robust match regardless of singular/plural naming
-                            const name = mesh.name.toLowerCase();
-                            const isTargetMesh = name.includes(targetMeshTag);
-                            mesh.visible = isTargetMesh;
+                            const isDigital = materialOverride === 'digital';
+                            const useThemed = materialOverride && !isDigital && cleanMat.current;
+                            mesh.material = useThemed ? (cleanMat.current as THREE.Material) : cometMat;
 
-                            if (isTargetMesh) {
-                                // COMETS must use their original shader material (cometMat) 
-                                const isDigital = materialOverride === 'digital';
-                                const useThemed = materialOverride && !isDigital && cleanMat.current;
-                                mesh.material = useThemed ? (cleanMat.current as THREE.Material) : cometMat;
+                            // Removed mesh.scale.set override to preserve FBX baked transforms
 
-                                // Combined scale: local vCometScale * prop cometScale * base multiplier
-                                let finalCometScale = vCometScale * cometScale;
-                                if (curiousValue >= 50.1) {
-                                    finalCometScale *= 2.0; // Assuming cometSizeMultiplier was roughly 2.0
-                                }
-                                mesh.scale.set(finalCometScale, finalCometScale, finalCometScale);
+                            if (mesh.material && (mesh.material as any).uniforms) {
+                                const uniforms = (mesh.material as any).uniforms;
+                                if (uniforms.uTime) uniforms.uTime.value = state.clock.getElapsedTime();
+                                if (uniforms.uSliders) uniforms.uSliders.value = values.map(v => v / 100);
+                            }
 
-                                if (mesh.material && (mesh.material as any).uniforms) {
-                                    const sh = (mesh.material as any).userData?.shader || ((mesh.material as any).type === 'ShaderMaterial' ? mesh.material : null);
-                                    if (sh && sh.uniforms) {
-                                        if (sh.uniforms.uTime) sh.uniforms.uTime.value = state.clock.getElapsedTime();
-                                        if (sh.uniforms.uSliders) sh.uniforms.uSliders.value = values.map(v => v / 100);
-                                        if (sh.uniforms.uIndices) sh.uniforms.uIndices.value = new Int32Array(8).fill(-1);
-                                    }
-                                }
-
-                                // Morph target: Always 1.0 for these comets as requested
-                                if (mesh.morphTargetInfluences && mesh.morphTargetDictionary) {
-                                    const morphIdx = mesh.morphTargetDictionary['high'];
-                                    if (morphIdx !== undefined) {
-                                        mesh.morphTargetInfluences[morphIdx] = 1.0;
-                                    }
-                                }
+                            if (mesh.morphTargetInfluences && mesh.morphTargetDictionary) {
+                                const mIdx = mesh.morphTargetDictionary['high'];
+                                if (mIdx !== undefined) mesh.morphTargetInfluences[mIdx] = influence;
                             }
                         }
-                    });
-                }
-            });
+                    } else {
+                        mesh.visible = false;
+                    }
+                });
+            }
         }
         const cloudMapping = {
             'Cloud_1': [0.00, 0.15],
@@ -1863,19 +1854,18 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
                     const cloudKey = Object.keys(cloudMapping).find(k => name.toLowerCase().includes(k.toLowerCase()));
                     const interval = cloudKey ? cloudMapping[cloudKey] : null;
 
-                    if (interval) {
-                        const [start, end] = interval;
-                        targetVal = Math.min(1.0, Math.max(0.0, (pVal - start) / (end - start)));
-                    }
+                    const [start, end] = interval || [0, 1];
+                    const growth = interval ? Math.min(1.0, Math.max(0.0, (pVal - start) / (end - start))) : 1.0;
+                    const targetInfluence = 1.0 - growth;
 
                     if (mesh.morphTargetInfluences && mesh.morphTargetDictionary) {
                         const idx = mesh.morphTargetDictionary['high'];
                         if (idx !== undefined) {
-                            mesh.morphTargetInfluences[idx] = targetVal;
+                            mesh.morphTargetInfluences[idx] = targetInfluence;
                         }
                     }
 
-                    if (targetVal <= 0.001) mesh.visible = false;
+                    if (growth <= 0.001) mesh.visible = false;
                 }
             });
         }
@@ -1929,16 +1919,16 @@ vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
                     />
                 </group>
 
-                {/* Comets - Synchronous Mounting */}
                 <group
                     ref={cometRef}
-                    scale={[0.004 * cometScale, 0.004 * cometScale, 0.004 * cometScale]}
+                    scale={[0.00004 * cometScale, 0.00004 * cometScale, 0.00004 * cometScale]}
                     position={[0, 0, 0]}
                     name="comet_group"
                 >
-                    {cometInstances.map((comet, i) => (
-                        <primitive key={i} object={comet} />
-                    ))}
+                    <primitive
+                        object={cometsClone}
+                        name="comet_primitive"
+                    />
                 </group>
 
                 {/* Clouds */}

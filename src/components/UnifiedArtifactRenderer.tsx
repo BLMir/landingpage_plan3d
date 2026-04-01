@@ -105,7 +105,7 @@ varying float vIsForest, vIsRing, vIsCloud;
 varying vec3 vWorldPos, vOriginalPos;
 varying vec2 vCustomUv;
 attribute vec3 aOriginalPos;
-uniform float uSliders[7], uTime, uHasDesertMap, uHasOceanMap, uIsArtifact;
+uniform float uSliders[7], uTime, uHasDesertMap, uHasOceanMap, uIsArtifact, uIsThemed;
 uniform float uIsForest, uIsRing, uIsLamp, uIsBaseMesh, uIsCloud;
 uniform sampler2D uDesertMap, uOceanMap;
 uniform vec3 uDesertColor, uOceanColor;
@@ -118,7 +118,7 @@ const sharedFragPars = `
 varying float vIsForest, vIsRing, vIsCloud;
 varying vec3 vWorldPos, vOriginalPos;
 varying vec2 vCustomUv;
-uniform float uSliders[7], uTime, uHasDesertMap, uHasOceanMap, uIsArtifact;
+uniform float uSliders[7], uTime, uHasDesertMap, uHasOceanMap, uIsArtifact, uIsThemed;
 uniform float uIsForest, uIsRing, uIsLamp, uIsBaseMesh, uIsCloud;
 uniform sampler2D uDesertMap, uOceanMap;
 uniform vec3 uDesertColor, uOceanColor;
@@ -209,6 +209,7 @@ export const applyArtifactShader = (shader: any, uniforms: any) => {
     shader.uniforms.uIsCloud = uniforms.uIsCloud || { value: 0.0 };
     shader.uniforms.uIsForest = uniforms.uIsForest || { value: 0.0 };
     shader.uniforms.uIsRing = uniforms.uIsRing || { value: 0.0 };
+    shader.uniforms.uIsThemed = uniforms.uIsThemed || { value: 0.0 };
     shader.vertexShader = shader.vertexShader.replace('#include <common>', `#include <common>\n${sharedVertPars}`).replace('#include <begin_vertex>', `#include <begin_vertex>\nvCustomUv = uv; vOriginalPos = position; vIsForest = uIsForest; vIsRing = uIsRing; vIsCloud = uIsCloud;`);
 
     const customMorphLogic = `
@@ -232,7 +233,8 @@ export const applyArtifactShader = (shader: any, uniforms: any) => {
 
     const normalLogic = `
 #include <normal_fragment_begin>
-normal = normalize(cross(dFdx(vWorldPos), dFdy(vWorldPos)));
+vec3 fNormal = normalize(cross(dFdx(vWorldPos), dFdy(vWorldPos)));
+normal = (uIsThemed > 0.5) ? normal : fNormal;
 nonPerturbedNormal = normal;
     `;
 
