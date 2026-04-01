@@ -938,6 +938,20 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
             const baseMat = (artifactMaterials ? artifactMaterials[materialOverride] : (mod.ARTIFACT_MATERIALS as any)[materialOverride]) || mod.ARTIFACT_MATERIALS.digital;
             const createM = (isF: number, isR: number, isBase: number, isC: number) => {
                 const m = baseMat.clone();
+                
+                // Force morph targets ONLY on the base mesh to avoid compiler crashing on static meshes (Clouds/Rings)
+                if (isBase > 0.5) {
+                    m.defines = {
+                        'USE_UV': '',
+                        'USE_MORPHTARGETS': '',
+                        'USE_MORPHNORMALS': ''
+                    };
+                    // @ts-ignore
+                    m.morphTargets = true;
+                    // @ts-ignore
+                    m.morphNormals = true;
+                }
+
                 m.onBeforeCompile = (sh: any) => {
                     if (!m.userData) (m as any).userData = {};
                     m.userData.shader = sh;
