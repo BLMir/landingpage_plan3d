@@ -72,7 +72,7 @@ export default function Hero() {
                 </div>
 
                 <button onClick={scrollToQuiz} className={styles.ctaButton}>
-                    Create My Planet
+                    Create My Plan3d
                 </button>
 
                 <p className={styles.subtitle}>
