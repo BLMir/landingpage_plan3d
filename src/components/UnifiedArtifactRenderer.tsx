@@ -32,7 +32,7 @@ export const LAMP_BIOME_COLORS = {
 export const ARTIFACT_TRANSFORMS: Record<string, { position: [number, number, number], rotation: [number, number, number], overallScale: number, planetScale: number, cloudScale: number, cometScale: number, ringScale: number }> = {
     digital: { position: [0, 0, 0], rotation: [-9, 70, 0], overallScale: 1.0, planetScale: 1.0, cloudScale: 1.0, cometScale: 1.0, ringScale: 1.0 },
     lamp: { position: [0, -1.4, 0], rotation: [-9, 70, 0], overallScale: 1.03, planetScale: 1.0, cloudScale: 1.0, cometScale: 1.0, ringScale: 1.0 },
-    necklace: { position: [-0.75, -3, 0], rotation: [-9, 70, 0], overallScale: 0.9, planetScale: 1.0, cloudScale: 1.05, cometScale: 1.05, ringScale: 1.05 },
+    necklace: { position: [-0.25, -3, 0], rotation: [-9, 70, 0], overallScale: 0.8, planetScale: 1.0, cloudScale: 1.12, cometScale: 1.05, ringScale: 1.12 },
     bracelet: { position: [0, -4.1, 0], rotation: [-9, 70, 0], overallScale: 0.7, planetScale: 1.0, cloudScale: 1.2, cometScale: 1.15, ringScale: 1.2 }
 };
 
@@ -296,7 +296,20 @@ export const UnifiedArtifactRenderer: React.FC<ArtifactProps> = ({ values, mater
                 </div>
             )}
             <Canvas
-                camera={{ position: [0, 0, 18], fov: 45 }}
+                camera={{ 
+                    position: [0, 0, materialOverride === 'digital' ? 22 : 18], 
+                    fov: 45 
+                }}
+                onCreated={({ camera, gl }) => {
+                    if (materialOverride === 'digital') {
+                        // For background planets, ensure they fit narrow portrait screens
+                        const aspect = gl.domElement.clientWidth / gl.domElement.clientHeight;
+                        if (aspect < 1) {
+                            (camera as any).fov = 45 / aspect; // Auto-zoom out on narrow screens
+                            camera.updateProjectionMatrix();
+                        }
+                    }
+                }}
                 frameloop="demand"
             >
                 <Suspense fallback={null}>

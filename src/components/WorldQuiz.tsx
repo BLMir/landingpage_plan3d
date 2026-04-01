@@ -6,7 +6,7 @@ import styles from './WorldQuiz.module.css';
 import { Planet3D, Planet3DHandle } from './Planet3D';
 import { UnifiedArtifactRenderer, ARTIFACT_TRANSFORMS } from './UnifiedArtifactRenderer';
 import { useProgress } from '@react-three/drei';
-import { ArrowLeft, ArrowRight, Download, Mail } from './Icons';
+import { ArrowLeft, ArrowRight, Download, Mail, RotateIcon } from './Icons';
 import * as THREE from 'three';
 import { STLExporter } from 'three/examples/jsm/exporters/STLExporter.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
@@ -83,6 +83,15 @@ const artifactOptions = [
     { id: 'artifact_6', label: 'Bracelet', format: 'Bracelet', image: getAssetPath('/artifact/Format_6.png'), priceTiers: [15, 25, 35], subtitle: '' },
 ];
 
+const SLIDER_COLORS = [
+    '#d3bca8', // Q1
+    '#e37565', // Q2
+    '#77c6db', // Q3
+    '#7fc8b1', // Q4
+    '#d4af96', // Q5
+    '#324e81', // Q6
+    '#98b1a3'  // Q7
+];
 
 export default function WorldQuiz() {
     const [view, setView] = useState<'traitSelection' | 'traitSummary' | 'quiz' | 'email' | 'artifact' | 'success'>('quiz');
@@ -109,6 +118,7 @@ export default function WorldQuiz() {
     // UI State
     const [showIdleOverlay, setShowIdleOverlay] = useState(false); // Commented out/disabled for now
     const [hasInteracted, setHasInteracted] = useState(false);
+    const [hasRotatedPlanet, setHasRotatedPlanet] = useState(false);
     const idleTimerRef = useMemo(() => ({ current: null as NodeJS.Timeout | null }), []);
     const [email, setEmail] = useState('');
     const [userName, setUserName] = useState('');
@@ -451,7 +461,7 @@ export default function WorldQuiz() {
 
 
     return (
-        <section id="quiz" className={styles.quizSection}>
+        <section id="quiz" className={`${styles.quizSection} ${(view === 'email' || view === 'success') ? styles.emailViewLayout : ''}`}>
             <div className={styles.nebula} />
             
             <div className={styles.quizLayout}>
@@ -474,11 +484,17 @@ export default function WorldQuiz() {
                         </div>
 
                         <div className={styles.centerQuizLayer}>
+                            {/* Planet Drag Instruction */}
+                            <div className={`${styles.dragInstructionOverlay} ${(showIdleOverlay && isQuizReady && !hasRotatedPlanet) ? styles.active : styles.hidden}`}>
+                                <RotateIcon className={`${styles.instructionIcon} ${styles.spinIcon}`} />
+                                <span className={styles.dragText}>Drag to rotate<br/>the planet</span>
+                            </div>
+
                             <div
                                 className={`${styles.globalPlanetContainer} ${styles.globalPlanetVisible}`}
                                 style={{ '--glow-color': currentGlowColor } as React.CSSProperties}
                             >
-                                <div className={styles.planetVisual}>
+                                <div className={styles.planetVisual} onPointerDown={() => setHasRotatedPlanet(true)}>
                                     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
                                         <Suspense fallback={<div className={styles.planetLoaderPlaceholder}>Establishing Connection...</div>}>
                                             <Planet3D
@@ -516,6 +532,7 @@ export default function WorldQuiz() {
                                         className={styles.logoSliderInteractable}
                                         style={{
                                             '--glow-color': currentGlowColor,
+                                            '--thumb-bg': SLIDER_COLORS[currentQuestionIndex] || '#6366f1',
                                             '--thumb-image': `url('${getAssetPath('/Logo color.png')}')`
                                         } as React.CSSProperties}
                                     />
@@ -544,25 +561,42 @@ export default function WorldQuiz() {
                 )}
 
                 {view === 'email' && (
-                    <div className={styles.emailForm}>
+                    <>
+                        {/* 🕹️ ADJUST THE EMAILS BACKGROUND PLANET HERE */}
+                        <div 
+                            className={styles.emailPlanetBackground}
+                            style={{
+                                '--bg-planet-scale': '0.9',
+                                '--bg-planet-scale-mobile': '0.7', // Synced with latest CSS edit
+                                '--bg-planet-blur': '12px'
+                            } as React.CSSProperties}
+                        >
+                            <Suspense fallback={null}>
+                                <UnifiedArtifactRenderer
+                                    values={elementOptions.map(opt => elementValues[opt.id])}
+                                    materialOverride={'digital'}
+                                />
+                            </Suspense>
+                        </div>
+                        <div className={styles.emailForm}>
                         <div className={styles.emailHeader}>
-                            <h2 className={styles.questionTitle}>Almost done!</h2>
-                            <p className={styles.emailSubtext}>
-                                We will let you know when we have your results + your planet ready!
-                            </p>
+                            <h1 className={styles.almostDoneTitle}>Almost done!</h1>
+                            <p className={styles.emailSubtitle}>Get your Digital planet + your test results!</p>
                         </div>
                         <div className={styles.emailBottom}>
-                            <form onSubmit={handleEmailSubmit} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center' }}>
+                            <form onSubmit={handleEmailSubmit} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '1.5rem', alignItems: 'center' }}>
                                 <input type="text" required placeholder="Your Name" value={userName} onChange={(e) => setUserName(e.target.value)} className={styles.emailInput} />
                                 <input type="number" required placeholder="Age" value={userAge} onChange={(e) => setUserAge(e.target.value)} className={styles.emailInput} />
                                 <input type="email" required placeholder="enter@email.com" value={email} onChange={(e) => setEmail(e.target.value)} className={styles.emailInput} />
-                                <button type="submit" className={styles.continueBtn} disabled={submitting}>
-                                    {submitting ? 'Transmitting...' : 'Save your Planet'}
+                                <button type="submit" className={`${styles.continueBtn} ${styles.emailSubmitBtn}`} disabled={submitting}>
+                                    {submitting ? 'Transmitting...' : 'Get my Plan3d!'}
                                 </button>
                             </form>
                         </div>
                     </div>
+                </>
                 )}
+
                                 {view === 'artifact' && (
                     <div className={styles.artifactSection}>
                         <h2 className={styles.artifactTitle}>How would you like your planet?</h2>
@@ -648,11 +682,29 @@ export default function WorldQuiz() {
                 )}
 
                 {view === 'success' && (
-                    <div className={styles.successMessage}>
-                        <span className={styles.successIcon}>✨</span>
-                        <h2 className={styles.questionTitle}>Thanks, Transmission Received!</h2>
-                        <p className={styles.optionDesc}>We will send you an email with your planet when is ready!</p>
-                    </div>
+                    <>
+                        <div 
+                            className={styles.emailPlanetBackground}
+                            style={{
+                                '--bg-planet-scale': '0.9',
+                                '--bg-planet-scale-mobile': '0.7',
+                                '--bg-planet-blur': '12px'
+                            } as React.CSSProperties}
+                        >
+                            <Suspense fallback={null}>
+                                <UnifiedArtifactRenderer
+                                    values={elementOptions.map(opt => elementValues[opt.id])}
+                                    materialOverride={'digital'}
+                                />
+                            </Suspense>
+                        </div>
+                        <div className={styles.emailForm}>
+                            <div className={styles.emailHeader}>
+                                <h1 className={styles.almostDoneTitle}>Thanks, Transmission Received!</h1>
+                                <p className={styles.emailSubtitle}>We will send you an email with your planet when is ready!</p>
+                            </div>
+                        </div>
+                    </>
                 )}
             </div>
         </section >

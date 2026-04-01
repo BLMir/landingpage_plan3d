@@ -83,7 +83,7 @@ float getGrowthAlpha(vec3 pos, vec3 seedPoint, float intensity) {
 // Preload to avoid waterfalls
 useGLTF.preload(getAssetPath('/models/forest.glb'));
 
-const FOREST_GLB_SCALE = 0.395;
+const FOREST_GLB_SCALE = 0.385;
 
 interface DisplacementSphereProps {
     values: number[];
@@ -466,10 +466,10 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
     materialOverride,
     lampColors,
     artifactMaterials,
-    planetScale = 1.0,
-    cloudScale = 1.0,
-    cometScale = 1.0,
-    ringScale = 1.0,
+    planetScale = 1.3,
+    cloudScale = 1.14,
+    cometScale = 1.3,
+    ringScale = 1.1,
     cometSizeMultiplier = 1.0 // Jumbo size (1.0 = original)
 }) => {
     const base = useFBX(getAssetPath('/models/base.fbx'));
@@ -938,7 +938,7 @@ const DisplacementSphereBase: React.FC<DisplacementSphereProps> = ({
             const baseMat = (artifactMaterials ? artifactMaterials[materialOverride] : (mod.ARTIFACT_MATERIALS as any)[materialOverride]) || mod.ARTIFACT_MATERIALS.digital;
             const createM = (isF: number, isR: number, isBase: number, isC: number) => {
                 const m = baseMat.clone();
-                
+
                 // Force morph targets ONLY on the base mesh to avoid compiler crashing on static meshes (Clouds/Rings)
                 if (isBase > 0.5) {
                     m.defines = {
