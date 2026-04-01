@@ -105,7 +105,7 @@ varying float vIsForest, vIsRing, vIsCloud;
 varying vec3 vWorldPos, vOriginalPos;
 varying vec2 vCustomUv;
 attribute vec3 aOriginalPos;
-uniform float uSliders[7], uTime, uHasDesertMap, uHasOceanMap, uIsArtifact;
+uniform float uSliders[7], uTime, uHasDesertMap, uHasOceanMap, uIsArtifact, uIsThemed;
 uniform float uIsForest, uIsRing, uIsLamp, uIsBaseMesh, uIsCloud;
 uniform sampler2D uDesertMap, uOceanMap;
 uniform vec3 uDesertColor, uOceanColor;
@@ -118,7 +118,7 @@ const sharedFragPars = `
 varying float vIsForest, vIsRing, vIsCloud;
 varying vec3 vWorldPos, vOriginalPos;
 varying vec2 vCustomUv;
-uniform float uSliders[7], uTime, uHasDesertMap, uHasOceanMap, uIsArtifact;
+uniform float uSliders[7], uTime, uHasDesertMap, uHasOceanMap, uIsArtifact, uIsThemed;
 uniform float uIsForest, uIsRing, uIsLamp, uIsBaseMesh, uIsCloud;
 uniform sampler2D uDesertMap, uOceanMap;
 uniform vec3 uDesertColor, uOceanColor;
@@ -209,20 +209,44 @@ export const applyArtifactShader = (shader: any, uniforms: any) => {
     shader.uniforms.uIsCloud = uniforms.uIsCloud || { value: 0.0 };
     shader.uniforms.uIsForest = uniforms.uIsForest || { value: 0.0 };
     shader.uniforms.uIsRing = uniforms.uIsRing || { value: 0.0 };
+    shader.uniforms.uIsThemed = uniforms.uIsThemed || { value: 0.0 };
     shader.vertexShader = shader.vertexShader.replace('#include <common>', `#include <common>\n${sharedVertPars}`).replace('#include <begin_vertex>', `#include <begin_vertex>\nvCustomUv = uv; vOriginalPos = position; vIsForest = uIsForest; vIsRing = uIsRing; vIsCloud = uIsCloud;`);
 
     const customMorphLogic = `
-        float mI[8]; for (int i=0; i<8; i++) mI[i] = 0.0;
+        float maskedInfluences[8];
+        for (int i=0; i<8; i++) maskedInfluences[i] = 0.0;
         
         if (uIsBaseMesh > 0.5) {
-            float iD = uSliders[0], iV = uSliders[1], iO = uSliders[2], iF = uSliders[3];
-            vec3 sD = vec3(0.0, 0.4, -1.0), sV = vec3(1.0, 0.4, 0.0), sO = vec3(0.0, 0.4, 1.0), sF = vec3(-1.0, 0.4, 0.0);
-            float aD = getGrowthAlpha_planet(transformed, sD, iD), aV = getGrowthAlpha_planet(transformed, sV, iV), aO = getGrowthAlpha_planet(transformed, sO, iO), aF = getGrowthAlpha_planet(transformed, sF, iF);
-            float mD = aD*(1.0-aV)*(1.0-aO)*(1.0-aF), mV = aV*(1.0-aO)*(1.0-aF), mO = aO*(1.0-aF), mF = aF;
-            for (int i=0; i<8; i++) { int t = uIndices[i]; if (t==0) mI[i]=mD*1.8; else if (t==1) mI[i]=mO*1.8; else if (t==2) mI[i]=mV*1.8; else if (t==3) mI[i]=mF*1.8; }
-            ${THREE.ShaderChunk['morphtarget_vertex'].replace(/morphTargetInfluences/g, 'mI')}
+            float intenDesert  = uSliders[0];
+            float intenVolcano = uSliders[1];
+            float intenOcean   = uSliders[2];
+            float intenForest  = uSliders[3];
+            
+            vec3 sD = vec3(0.0, 0.4, -1.0); // Desert
+            vec3 sV = vec3(1.0, 0.4, 0.0);  // Volcano
+            vec3 sO = vec3(0.0, 0.4, 1.0);  // Ocean
+            vec3 sF = vec3(-1.0, 0.4, 0.0); // Forest
+            
+            float aD = getGrowthAlpha_planet(transformed, sD, intenDesert);
+            float aV = getGrowthAlpha_planet(transformed, sV, intenVolcano);
+            float aO = getGrowthAlpha_planet(transformed, sO, intenOcean);
+            float aF = getGrowthAlpha_planet(transformed, sF, intenForest);
+            
+            float mD = aD * (1.0 - aV) * (1.0 - aO) * (1.0 - aF);
+            float mV = aV * (1.0 - aO) * (1.0 - aF);
+            float mO = aO * (1.0 - aF);
+            float mF = aF;
+            
+            for (int i=0; i<8; i++) {
+                int t = uIndices[i];
+                if (t == 0) maskedInfluences[i] = mD * 1.8;
+                else if (t == 1) maskedInfluences[i] = mO * 1.8;
+                else if (t == 2) maskedInfluences[i] = mV * 1.8;
+                else if (t == 3) maskedInfluences[i] = mF * 1.8;
+            }
+            ${THREE.ShaderChunk['morphtarget_vertex'].replace(/morphTargetInfluences/g, 'maskedInfluences')}
         } else {
-            ${THREE.ShaderChunk['morphtarget_vertex']} // Pass through raw influence arrays natively
+            ${THREE.ShaderChunk['morphtarget_vertex']}
         }
         
         vWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
@@ -232,7 +256,8 @@ export const applyArtifactShader = (shader: any, uniforms: any) => {
 
     const normalLogic = `
 #include <normal_fragment_begin>
-normal = normalize(cross(dFdx(vWorldPos), dFdy(vWorldPos)));
+vec3 fNormal = normalize(cross(dFdx(vWorldPos), dFdy(vWorldPos)));
+normal = fNormal;
 nonPerturbedNormal = normal;
     `;
 

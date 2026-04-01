@@ -136,7 +136,7 @@ export default function WorldQuiz() {
     );
     const [wishlisted, setWishlisted] = useState<Set<string>>(new Set(['artifact_1']));
     const [elementValues, setElementValues] = useState<Record<string, number>>({
-        'Ocean': 0, 'Volcano': 0, 'Desert': 0, 'Forest': 0, 'Q3': 50, 'Q4': 50, 'Q5': 50
+        'Ocean': 0, 'Volcano': 0, 'Desert': 0, 'Forest': 0, 'Q3': 0, 'Q4': 0, 'Q5': 0
     });
     const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
     const [orderedTraits, setOrderedTraits] = useState<string[]>([
@@ -330,7 +330,7 @@ export default function WorldQuiz() {
                 setSliderValue(savedValue);
             } else {
                 const isPersonalitySplit = ['Ocean', 'Volcano', 'Desert', 'Forest'].includes(prevQuestion.elementId);
-                setSliderValue(isPersonalitySplit ? 0 : 50);
+                setSliderValue(0);
             }
             
             setIsQuestionTransitioning(false);
@@ -362,7 +362,7 @@ export default function WorldQuiz() {
                     setSliderValue(savedValue);
                 } else {
                     const isPersonalitySplit = ['Ocean', 'Volcano', 'Desert', 'Forest'].includes(nextQuestion.elementId);
-                    setSliderValue(isPersonalitySplit ? 0 : 50);
+                    setSliderValue(0);
                 }
                 
                 setIsQuestionTransitioning(false);
@@ -389,7 +389,7 @@ export default function WorldQuiz() {
             const answersArray = quizQuestions.map(q => ({
                 questionId: q.id,
                 statement: q.statement,
-                score: allAnswers[q.id] || 50
+                score: allAnswers[q.id] || 0
             }));
 
             const payload = {
