@@ -2921,7 +2921,7 @@
     .artifactCanvasWrapper {
         flex: none;
         width: 100%;
-        aspect-ratio: 1 / 0.55;
+        height: 90px !important;
     }
 
     .artifactName {
