@@ -101,7 +101,7 @@ const SLIDER_WORDS = [
     ['Collaborative', 'Affable', 'Altruistic'],     // Q3
     ['Talkative', 'Outgoing', 'Exuberant'],         // Q4
     ['Reliable', 'Organised', 'Disciplined'],       // Q5
-    ['Adventurous', 'Imaginative', 'Creative'],     // Q6
+    ['Adaptable', 'Imaginative', 'Creative'],     // Q6
     ['Calm', 'Confident', 'Resilient'],             // Q7
 ];
 
