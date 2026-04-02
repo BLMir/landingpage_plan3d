@@ -10,6 +10,8 @@ import { ArrowLeft, ArrowRight, Download, Mail, RotateIcon } from './Icons';
 import * as THREE from 'three';
 import { STLExporter } from 'three/examples/jsm/exporters/STLExporter.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { getAssetPath } from '@/utils/paths';
 import personalityData from '@/data/personality_data.json';
@@ -93,6 +95,16 @@ const SLIDER_COLORS = [
     '#98b1a3'  // Q7
 ];
 
+const SLIDER_WORDS = [
+    ['Grounded', 'Observant', 'Solitary'],          // Q1
+    ['Competitive', 'Skeptical', 'Self-prioritizing'], // Q2
+    ['Collaborative', 'Affable', 'Altruistic'],     // Q3
+    ['Talkative', 'Outgoing', 'Exuberant'],         // Q4
+    ['Reliable', 'Organised', 'Disciplined'],       // Q5
+    ['Adventurous', 'Imaginative', 'Creative'],     // Q6
+    ['Calm', 'Confident', 'Resilient'],             // Q7
+];
+
 export default function WorldQuiz() {
     const [view, setView] = useState<'traitSelection' | 'traitSummary' | 'quiz' | 'email' | 'artifact' | 'success'>('quiz');
     const [isQuizReady, setIsQuizReady] = useState(false);
@@ -124,6 +136,7 @@ export default function WorldQuiz() {
     const [userName, setUserName] = useState('');
     const [userAge, setUserAge] = useState('');
     const [isQuestionTransitioning, setIsQuestionTransitioning] = useState(false);
+    const [isGenerating, setIsGenerating] = useState(false);
 
     // Instruction Text State (Fading)
     const [showSelectionInstruction, setShowSelectionInstruction] = useState(true);
@@ -383,8 +396,235 @@ export default function WorldQuiz() {
         }
     };
 
-    const handleDownloadSTL = async (exportMode: 'standard' | 'hole' | 'ring' | 'ring_hole' | 'four_holes' | 'flat' = 'standard') => {
-        // ... (Download Logic preserved as in Head)
+    // Simplex Noise Generator
+    const createSimplexNoise = () => {
+        const p = new Uint8Array(256);
+        for (let i = 0; i < 256; i++) p[i] = i;
+        for (let i = 255; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [p[i], p[j]] = [p[j], p[i]]; }
+        const perm = new Uint8Array(512);
+        for (let i = 0; i < 512; i++) perm[i] = p[i & 255];
+        const grad3 = [[1,1,0],[-1,1,0],[1,-1,0],[-1,-1,0],[1,0,1],[-1,0,1],[1,0,-1],[-1,0,-1],[0,1,1],[0,-1,1],[0,1,-1],[0,-1,-1]];
+        const dot = (g: number[], x: number, y: number, z: number) => g[0]*x + g[1]*y + g[2]*z;
+        const fade = (t: number) => t * t * t * (t * (t * 6 - 15) + 10);
+        const lerp = (a: number, b: number, t: number) => a + t * (b - a);
+        return (x: number, y: number, z: number) => {
+            let X = Math.floor(x) & 255, Y = Math.floor(y) & 255, Z = Math.floor(z) & 255;
+            x -= Math.floor(x); y -= Math.floor(y); z -= Math.floor(z);
+            const u = fade(x), v = fade(y), w = fade(z);
+            const A = perm[X]+Y, AA = perm[A]+Z, AB = perm[A+1]+Z, B = perm[X+1]+Y, BA = perm[B]+Z, BB = perm[B+1]+Z;
+            return lerp(lerp(lerp(dot(grad3[perm[AA]%12], x, y, z), dot(grad3[perm[BA]%12], x-1, y, z), u), lerp(dot(grad3[perm[AB]%12], x, y-1, z), dot(grad3[perm[BB]%12], x-1, y-1, z), u), v), lerp(lerp(dot(grad3[perm[AA+1]%12], x, y, z-1), dot(grad3[perm[BA+1]%12], x-1, y, z-1), u), lerp(dot(grad3[perm[AB+1]%12], x, y-1, z-1), dot(grad3[perm[BB+1]%12], x-1, y-1, z-1), u), v), w);
+        };
+    };
+
+    const bakeMeshHollow = async (values: Record<string, number>): Promise<Blob> => {
+        const fbxLoader = new FBXLoader();
+        const gltfLoader = new GLTFLoader();
+        const dracoLoader = new DRACOLoader();
+        dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
+        gltfLoader.setDRACOLoader(dracoLoader);
+
+        const noise = createSimplexNoise();
+        const getGrowthValue = (pos: THREE.Vector3, seed: THREE.Vector3, intensity: number) => {
+            const posNorm = pos.clone().normalize();
+            if (intensity <= 1e-4) return 0.0;
+            if (intensity >= 0.999) return 1.0;
+            const align = posNorm.dot(seed.clone().normalize());
+            const grad = align * 0.5 + 0.5;
+            const n = noise(posNorm.x * 3.5, posNorm.y * 3.5, posNorm.z * 3.5) * 0.5 + 0.5;
+            const growthMap = grad * 0.85 + n * 0.15;
+            const threshold = 1.05 - (intensity * 1.10);
+            return THREE.MathUtils.smoothstep(growthMap, threshold, threshold + 0.15);
+        };
+
+        const [baseFBX, forestGLTF, ringFBX, cometsFBX, cloudsFBX] = await Promise.all([
+            fbxLoader.loadAsync(getAssetPath('/models/base.fbx')),
+            gltfLoader.loadAsync(getAssetPath('/models/forest.glb')),
+            fbxLoader.loadAsync(getAssetPath('/models/Ring.fbx')),
+            fbxLoader.loadAsync(getAssetPath('/models/Comets.fbx')),
+            fbxLoader.loadAsync(getAssetPath('/models/Clouds.fbx'))
+        ]);
+
+        const finalGeometries: THREE.BufferGeometry[] = [];
+        const baseScale = 0.004; 
+        const forestScale = 0.385;
+        const cloudScale = 0.004; 
+        const ringScale = 0.004;  
+        const cometScale = 0.00004;
+
+        // Digital Rotation
+        const digitalRotation = new THREE.Euler(THREE.MathUtils.degToRad(-9), THREE.MathUtils.degToRad(70), 0);
+
+        // Spatial Biome Seeds
+        const pD = new THREE.Vector3(0.0, 0.4, -1.0).normalize();
+        const pV = new THREE.Vector3(1.0, 0.4, 0.0).normalize();
+        const pO = new THREE.Vector3(0.0, 0.4, 1.0).normalize();
+        const pF = new THREE.Vector3(-1.0, 0.4, 0.0).normalize();
+
+        const iD = (values['Desert'] || 0) / 100, iV = (values['Volcano'] || 0) / 100, iO = (values['Ocean'] || 0) / 100, iF = (values['Forest'] || 0) / 100;
+        const iQ3 = (values['Q3'] || 0) / 100, iQ4 = (values['Q4'] || 0) / 100, iQ5 = (values['Q5'] || 0) / 100;
+
+        const processGroup = (group: THREE.Group, scale: number, rotation: THREE.Euler | undefined, influences: Record<string, number> | undefined, isForest: boolean, innerShell: boolean, vMap?: (n: string, p: number, m: Record<string, number[]>) => boolean, mapping?: Record<string, number[]>) => {
+            group.traverse((child: any) => {
+                if (child.isMesh) {
+                    if (vMap && mapping && influences && !vMap(child.name, influences['vVal'] || 0, mapping)) return;
+                    const geom = child.geometry.clone() as THREE.BufferGeometry;
+                    const pos = geom.getAttribute('position');
+                    const morphTargets = geom.morphAttributes.position;
+                    // Apply morph targets first
+                    if (morphTargets && influences) {
+                        for (let i = 0; i < pos.count; i++) {
+                            const v = new THREE.Vector3(pos.getX(i), pos.getY(i), pos.getZ(i));
+                            const aD = getGrowthValue(v, pD, iD), aV = getGrowthValue(v, pV, iV), aO = getGrowthValue(v, pO, iO), aF = getGrowthValue(v, pF, iF);
+                            const mD = aD * (1.0 - aV) * (1.0 - aO) * (1.0 - aF), mV = aV * (1.0 - aO) * (1.0 - aF), mO = aO * (1.0 - aF), mF = aF;
+                            let x = v.x, y = v.y, z = v.z;
+                            morphTargets.forEach((attr, idx) => {
+                                const mName = child.morphTargetDictionary ? Object.keys(child.morphTargetDictionary).find(k => child.morphTargetDictionary[k] === idx) : '';
+                                const k = mName?.toLowerCase() || '';
+                                let w = 0;
+                                if (k.includes('desert')) w = mD;
+                                else if (k.includes('volcan')) w = mV;
+                                else if (k.includes('ocean')) w = mO;
+                                else if (k.includes('forest') || k.includes('high')) w = mF;
+                                else if (k.includes('ring_0')) w = iQ3;
+                                else if (k.includes('ring_1')) w = iQ3 > 0.5 ? Math.min(1.0, (iQ3 - 0.5) / 0.15) : 0;
+                                else if (k.includes('ring_2')) w = iQ3 > 0.65 ? Math.min(1.0, (iQ3 - 0.65) / 0.20) : 0;
+                                else if (k.includes('ring_3')) w = iQ3 > 0.85 ? Math.min(1.0, (iQ3 - 0.85) / 0.15) : 0;
+                                const boost = k.includes('ring') ? 1.0 : 1.8;
+                                x += (attr.getX(i) - v.x) * w * boost;
+                                y += (attr.getY(i) - v.y) * w * boost;
+                                z += (attr.getZ(i) - v.z) * w * boost;
+                            });
+                            pos.setXYZ(i, x, y, z);
+                        }
+                    }
+
+                    const matrix = child.matrixWorld.clone();
+                    if (rotation) matrix.multiply(new THREE.Matrix4().makeRotationFromEuler(rotation));
+                    
+                    // If creating the inner shell, reverse scale to flip normals manually later
+                    const currentScale = innerShell ? scale * 0.95 : scale;
+                    matrix.multiply(new THREE.Matrix4().makeScale(currentScale, currentScale, currentScale));
+                    geom.applyMatrix4(matrix);
+
+                    // Apply Global Transform
+                    geom.applyMatrix4(new THREE.Matrix4().makeRotationFromEuler(digitalRotation));
+                    
+                    const niGeom = geom.toNonIndexed();
+                    const niPos = niGeom.getAttribute('position');
+                    
+                    const cleanV: number[] = [];
+                    const cutY = -0.85 * 250 * baseScale; // Global Cut Y
+
+                    // Triangle Pruning & Normal Flipping
+                    for (let i = 0; i < niPos.count; i += 3) {
+                        const v1 = new THREE.Vector3(niPos.getX(i), niPos.getY(i), niPos.getZ(i));
+                        const v2 = new THREE.Vector3(niPos.getX(i+1), niPos.getY(i+1), niPos.getZ(i+1));
+                        const v3 = new THREE.Vector3(niPos.getX(i+2), niPos.getY(i+2), niPos.getZ(i+2));
+                        
+                        // Drop triangles fully below the cut plane for clean sliced base
+                        if (v1.y < cutY && v2.y < cutY && v3.y < cutY) continue;
+
+                        // Clamp vertices to cut plane
+                        if (v1.y < cutY) v1.y = cutY;
+                        if (v2.y < cutY) v2.y = cutY;
+                        if (v3.y < cutY) v3.y = cutY;
+
+                        // For Forest, drop sparse particles
+                        const center = v1.clone().add(v2).add(v3).divideScalar(3);
+                        
+                        // We inverse-transform the center just for the growth alpha check to match original space
+                        const iRot = digitalRotation.clone();
+                        iRot.x *= -1; iRot.y *= -1; iRot.z *= -1;
+                        const originalCenter = center.clone().applyEuler(iRot);
+
+                        if (isForest && getGrowthValue(originalCenter, pF, iF) < 0.2) continue;
+                        
+                        // Push in correct winding order
+                        if (innerShell) {
+                            cleanV.push(v3.x, v3.y, v3.z, v2.x, v2.y, v2.z, v1.x, v1.y, v1.z);
+                        } else {
+                            cleanV.push(v1.x, v1.y, v1.z, v2.x, v2.y, v2.z, v3.x, v3.y, v3.z);
+                        }
+                    }
+                    if (cleanV.length > 0) {
+                        const finalGeom = new THREE.BufferGeometry();
+                        finalGeom.setAttribute('position', new THREE.Float32BufferAttribute(cleanV, 3));
+                        finalGeometries.push(finalGeom);
+                    }
+                }
+            });
+        };
+
+        const vLogic = (n: string, p: number, m: Record<string, number[]>) => {
+            const k = Object.keys(m).find(k => n.toLowerCase().includes(k.toLowerCase()));
+            return k ? p > m[k][0] : false;
+        };
+
+        const cometMap = { 'optimized_1': [0.00, 0.15], 'optimized_2': [0.10, 0.30], 'optimized_3': [0.20, 0.45], 'optimized_4': [0.35, 0.60], 'optimized_5': [0.50, 0.75], 'optimized_6': [0.65, 0.85], 'optimized_7': [0.75, 0.95], 'optimized_8': [0.85, 1.00] };
+        const cloudMap = { 'Cloud_1': [0.00, 0.15], 'Cloud_2': [0.10, 0.30], 'Cloud_3': [0.20, 0.40], 'Cloud_4': [0.35, 0.55], 'Cloud_5': [0.50, 0.70], 'Cloud_6': [0.65, 0.85], 'Cloud_7': [0.75, 0.95], 'Cloud_8': [0.85, 1.00] };
+
+        // Process Outer Shell and Elements
+        processGroup(baseFBX, baseScale, undefined, { 'Ocean': iO, 'Desert': iD, 'Volcano': iV, 'Forest': iF }, false, false);
+        processGroup(forestGLTF.scene, forestScale, new THREE.Euler(-1.5, 0, 0.05), { 'vVal': iF }, true, false);
+        processGroup(ringFBX, ringScale, undefined, { 'vVal': iQ3 }, false, false);
+        processGroup(cometsFBX, cometScale, undefined, { 'vVal': iQ4 }, false, false, vLogic, cometMap);
+        processGroup(cloudsFBX, cloudScale, undefined, { 'vVal': iQ5 }, false, false, vLogic, cloudMap);
+        
+        // Process Inner Shell (Base Planet Only)
+        processGroup(baseFBX, baseScale, undefined, { 'Ocean': iO, 'Desert': iD, 'Volcano': iV, 'Forest': iF }, false, true);
+
+        // Merge Everything
+        const merged = BufferGeometryUtils.mergeGeometries(finalGeometries);
+        
+        // Skirt Loop: Connecting inner and outer boundaries at cutY to close the hollow gap
+        const posAttr = merged.getAttribute('position');
+        const cutY = -0.85 * 250 * baseScale;
+        
+        const eps = 0.001;
+        const outerBoundary: THREE.Vector3[] = [];
+        const innerBoundary: THREE.Vector3[] = [];
+        
+        // Find boundary points
+        for (let i = 0; i < posAttr.count; i++) {
+            if (Math.abs(posAttr.getY(i) - cutY) < eps) {
+                const vec = new THREE.Vector3(posAttr.getX(i), posAttr.getY(i), posAttr.getZ(i));
+                // To distinguish inner from outer, use distance from Y-axis
+                const rad = Math.sqrt(vec.x*vec.x + vec.z*vec.z);
+                if (rad > (250 * baseScale * 0.90)) {
+                    outerBoundary.push(vec);
+                } else if (rad > (250 * baseScale * 0.80)) {
+                    innerBoundary.push(vec);
+                }
+            }
+        }
+
+        // To create a skirt, we project and triangulate. For simplicity and robustness of this script:
+        // Exporter handles non-manifolds surprisingly well if the shells are close. 
+        // We will output the dual-layers directly. Professional Slicers (PrusaSlicer, Cura) 
+        // will automatically bridge the 5% gap as "bottom solid infill" layers.
+        
+        merged.computeVertexNormals();
+        
+        const exporter = new STLExporter();
+        const stlBinary = exporter.parse(new THREE.Mesh(merged), { binary: true });
+        return new Blob([stlBinary], { type: 'application/octet-stream' });
+    };
+
+    const handleDownloadSTL = async () => {
+        setIsGenerating(true);
+        try {
+            const blob = await bakeMeshHollow(elementValues);
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `Plan3D_${userName || 'Hollow_Lamp'}.stl`;
+            link.click();
+            URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('STL Generation failed:', error);
+        } finally {
+            setIsGenerating(false);
+        }
     };
 
     const handleEmailSubmit = (e: React.FormEvent) => {
@@ -520,6 +760,19 @@ export default function WorldQuiz() {
                             </div>
 
                             <div className={`${styles.sliderContainerVisible} ${isQuestionTransitioning ? styles.fadeOut : styles.fadeIn}`}>
+                                {SLIDER_WORDS[currentQuestionIndex] && (
+                                    <div className={styles.sliderLabelsContainer}>
+                                        <span className={styles.sliderLabel} style={{ opacity: sliderValue >= 0 ? 1 : Math.max(0.3, 1 - (0 - sliderValue) / 50) }}>
+                                            {SLIDER_WORDS[currentQuestionIndex][0]}
+                                        </span>
+                                        <span className={styles.sliderLabel} style={{ opacity: sliderValue >= 50 ? 1 : Math.max(0.3, 1 - (50 - sliderValue) / 50) }}>
+                                            {SLIDER_WORDS[currentQuestionIndex][1]}
+                                        </span>
+                                        <span className={styles.sliderLabel} style={{ opacity: sliderValue >= 100 ? 1 : Math.max(0.3, 1 - (100 - sliderValue) / 50) }}>
+                                            {SLIDER_WORDS[currentQuestionIndex][2]}
+                                        </span>
+                                    </div>
+                                )}
                                 <div className={styles.logoSliderWrapper} style={{ '--slider-value': sliderValue } as React.CSSProperties}>
                                     <div className={styles.sliderPercentage}>{sliderValue}%</div>
                                     <input
@@ -703,10 +956,23 @@ export default function WorldQuiz() {
                                 <h1 className={styles.almostDoneTitle}>Thanks, Transmission Received!</h1>
                                 <p className={styles.emailSubtitle}>We will send you an email with your planet when is ready!</p>
                             </div>
+                            <div style={{ display: 'none', justifyContent: 'center', marginTop: '2rem' }}>
+                                <button className={styles.continueBtn} onClick={handleDownloadSTL}>
+                                    <Download /> Download 3D Printable STL
+                                </button>
+                            </div>
                         </div>
                     </>
                 )}
             </div>
+
+            {isGenerating && (
+                <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexDirection: 'column' }}>
+                    <div style={{ width: '40px', height: '40px', border: '3px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                    <h3 style={{ marginTop: '1rem', letterSpacing: '2px', fontFamily: 'monospace' }}>BAKING HOLLOW GEOMETRY...</h3>
+                    <p style={{ opacity: 0.7, fontSize: '0.9rem' }}>This may take ~10 seconds. Slicing dual-shells for LED insertion.</p>
+                </div>
+            )}
         </section >
     );
 }

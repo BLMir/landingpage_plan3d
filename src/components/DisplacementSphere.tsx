@@ -83,7 +83,7 @@ float getGrowthAlpha(vec3 pos, vec3 seedPoint, float intensity) {
 // Preload to avoid waterfalls
 useGLTF.preload(getAssetPath('/models/forest.glb'));
 
-const FOREST_GLB_SCALE = 0.385;
+const FOREST_GLB_SCALE = 0.395;
 
 interface DisplacementSphereProps {
     values: number[];
