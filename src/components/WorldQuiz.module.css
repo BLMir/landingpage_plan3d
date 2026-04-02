@@ -988,7 +988,7 @@
     width: 200dvw !important;
     height: 200dvh !important;
     /* Recalibrated for 200% size + camera depth compensation */
-    transform: translate(-45.5%, -60%) scale(var(--bg-planet-scale, 0.55)) !important;
+    transform: translate(-45.5%, -60%) scale(var(--bg-planet-scale, 0.35)) !important;
     transform-origin: center center !important;
     display: flex !important;
     align-items: center !important;
@@ -998,7 +998,7 @@
 @media (max-width: 1000px) {
     .emailPlanetBackground>div {
         /* Recalibrated mobile for 200% size + depth compensation */
-        transform: translate(-40%, -55%) scale(var(--bg-planet-scale-mobile, 0.33)) !important;
+        transform: translate(-40%, -55%) scale(var(--bg-planet-scale-mobile, 0.27)) !important;
     }
 }
 

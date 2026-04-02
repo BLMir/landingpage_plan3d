@@ -933,7 +933,7 @@ export default function WorldQuiz() {
                                 <h1 className={styles.almostDoneTitle}>Thanks, Transmission Received!</h1>
                                 <p className={styles.emailSubtitle}>We will send you an email with your planet when is ready!</p>
                             </div>
-                            <div style={{ display: 'flex', justifyContent: 'center', marginTop: '2rem' }}>
+                            <div style={{ display: 'none', justifyContent: 'center', marginTop: '2rem' }}>
                                 <button className={styles.continueBtn} onClick={handleDownloadSTL}>
                                     <Download /> Download 3D Printable STL
                                 </button>
