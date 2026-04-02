@@ -2921,7 +2921,7 @@
     .artifactCanvasWrapper {
         flex: none;
         width: 100%;
-        aspect-ratio: 1 / 0.7;
+        aspect-ratio: 1 / 0.55;
     }
 
     .artifactName {
@@ -2935,7 +2935,7 @@
     }
 
     .artifactInfo {
-        gap: 0.3rem;
+        gap: 0.2rem;
         margin-top: 0;
         width: 100%;
     }
