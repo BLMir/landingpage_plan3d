@@ -95,6 +95,16 @@ const SLIDER_COLORS = [
     '#98b1a3'  // Q7
 ];
 
+const SLIDER_WORDS = [
+    ['Grounded', 'Observant', 'Solitary'],          // Q1
+    ['Achievement-driven', 'Skeptical', 'Self-prioritizing'], // Q2
+    ['Collaborative', 'Affable', 'Altruistic'],     // Q3
+    ['Talkative', 'Outgoing', 'Exuberant'],         // Q4
+    ['Reliable', 'Organised', 'Disciplined'],       // Q5
+    ['Adventurous', 'Imaginative', 'Creative'],     // Q6
+    ['Calm', 'Confident', 'Resilient'],             // Q7
+];
+
 export default function WorldQuiz() {
     const [view, setView] = useState<'traitSelection' | 'traitSummary' | 'quiz' | 'email' | 'artifact' | 'success'>('quiz');
     const [isQuizReady, setIsQuizReady] = useState(false);
@@ -750,6 +760,19 @@ export default function WorldQuiz() {
                             </div>
 
                             <div className={`${styles.sliderContainerVisible} ${isQuestionTransitioning ? styles.fadeOut : styles.fadeIn}`}>
+                                {SLIDER_WORDS[currentQuestionIndex] && (
+                                    <div className={styles.sliderLabelsContainer}>
+                                        <span className={styles.sliderLabel} style={{ opacity: Math.max(0.3, 1 - Math.abs(sliderValue - 0) / 50) }}>
+                                            {SLIDER_WORDS[currentQuestionIndex][0]}
+                                        </span>
+                                        <span className={styles.sliderLabel} style={{ opacity: Math.max(0.3, 1 - Math.abs(sliderValue - 50) / 50) }}>
+                                            {SLIDER_WORDS[currentQuestionIndex][1]}
+                                        </span>
+                                        <span className={styles.sliderLabel} style={{ opacity: Math.max(0.3, 1 - Math.abs(sliderValue - 100) / 50) }}>
+                                            {SLIDER_WORDS[currentQuestionIndex][2]}
+                                        </span>
+                                    </div>
+                                )}
                                 <div className={styles.logoSliderWrapper} style={{ '--slider-value': sliderValue } as React.CSSProperties}>
                                     <div className={styles.sliderPercentage}>{sliderValue}%</div>
                                     <input
