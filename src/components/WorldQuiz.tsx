@@ -97,7 +97,7 @@ const SLIDER_COLORS = [
 
 const SLIDER_WORDS = [
     ['Grounded', 'Observant', 'Solitary'],          // Q1
-    ['Achievement-driven', 'Skeptical', 'Self-prioritizing'], // Q2
+    ['Competitive', 'Skeptical', 'Self-prioritizing'], // Q2
     ['Collaborative', 'Affable', 'Altruistic'],     // Q3
     ['Talkative', 'Outgoing', 'Exuberant'],         // Q4
     ['Reliable', 'Organised', 'Disciplined'],       // Q5
@@ -762,13 +762,13 @@ export default function WorldQuiz() {
                             <div className={`${styles.sliderContainerVisible} ${isQuestionTransitioning ? styles.fadeOut : styles.fadeIn}`}>
                                 {SLIDER_WORDS[currentQuestionIndex] && (
                                     <div className={styles.sliderLabelsContainer}>
-                                        <span className={styles.sliderLabel} style={{ opacity: Math.max(0.3, 1 - Math.abs(sliderValue - 0) / 50) }}>
+                                        <span className={styles.sliderLabel} style={{ opacity: sliderValue >= 0 ? 1 : Math.max(0.3, 1 - (0 - sliderValue) / 50) }}>
                                             {SLIDER_WORDS[currentQuestionIndex][0]}
                                         </span>
-                                        <span className={styles.sliderLabel} style={{ opacity: Math.max(0.3, 1 - Math.abs(sliderValue - 50) / 50) }}>
+                                        <span className={styles.sliderLabel} style={{ opacity: sliderValue >= 50 ? 1 : Math.max(0.3, 1 - (50 - sliderValue) / 50) }}>
                                             {SLIDER_WORDS[currentQuestionIndex][1]}
                                         </span>
-                                        <span className={styles.sliderLabel} style={{ opacity: Math.max(0.3, 1 - Math.abs(sliderValue - 100) / 50) }}>
+                                        <span className={styles.sliderLabel} style={{ opacity: sliderValue >= 100 ? 1 : Math.max(0.3, 1 - (100 - sliderValue) / 50) }}>
                                             {SLIDER_WORDS[currentQuestionIndex][2]}
                                         </span>
                                     </div>
