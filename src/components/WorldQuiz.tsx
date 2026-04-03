@@ -876,7 +876,19 @@ export default function WorldQuiz() {
                                 else if (artifact.label.toLowerCase().includes('bracelet')) bgImage = '/bg_web_elements/bg_bracelet.png';
 
                                 return (
-                                    <div key={artifact.id} className={styles.artifactCard}>
+                                    <div 
+                                        key={artifact.id} 
+                                        className={`${styles.artifactCard} ${isDigital ? styles.digitalArtifactCard : styles.clickableArtifactCard}`}
+                                        onClick={() => {
+                                            if (isDigital) return;
+                                            setWishlisted(prev => {
+                                                const next = new Set(prev);
+                                                if (next.has(artifact.id)) next.delete(artifact.id);
+                                                else next.add(artifact.id);
+                                                return next;
+                                            });
+                                        }}
+                                    >
                                         <Image 
                                             src={getAssetPath(bgImage)} 
                                             alt="" 
@@ -896,20 +908,9 @@ export default function WorldQuiz() {
 
                                         <div className={styles.artifactInfo}>
                                             <h3 className={styles.artifactName}>{artifact.label}</h3>
-                                            <button
-                                                className={`${styles.artifactButton} ${isSaved || isDigital ? styles.wishlisted : ''} ${isDigital ? styles.disabled : ''}`}
-                                                onClick={() => {
-                                                    if (isDigital) return;
-                                                    setWishlisted(prev => {
-                                                        const next = new Set(prev);
-                                                        if (next.has(artifact.id)) next.delete(artifact.id);
-                                                        else next.add(artifact.id);
-                                                        return next;
-                                                    });
-                                                }}
-                                            >
+                                            <div className={`${styles.artifactButton} ${isSaved || isDigital ? styles.wishlisted : ''} ${isDigital ? styles.disabled : ''}`}>
                                                 {isDigital ? 'Free' : (isSaved ? 'Saved!' : 'Wishlist')}
-                                            </button>
+                                            </div>
                                         </div>
                                     </div>
                                 );

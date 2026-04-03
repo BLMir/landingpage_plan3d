@@ -2824,15 +2824,23 @@
     flex-direction: column;
     align-items: center;
     padding: 0.75rem;
-    /* Reduced from 1.5rem */
     border: 1px solid rgba(255, 255, 255, 0.1);
-    transition: transform 0.3s ease, border-color 0.3s ease;
+    transition: transform 0.3s ease, border-color 0.3s ease, background-color 0.3s ease;
     background: rgba(0, 0, 0, 0.2);
 }
 
-.artifactCard:hover {
+.clickableArtifactCard {
+    cursor: pointer;
+}
+
+.clickableArtifactCard:hover {
     transform: translateY(-5px);
     border-color: rgba(99, 102, 241, 0.5);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.digitalArtifactCard {
+    cursor: default;
 }
 
 .artifactCardBg {
