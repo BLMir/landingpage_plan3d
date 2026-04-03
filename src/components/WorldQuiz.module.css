@@ -2412,7 +2412,7 @@
 
     .bottomQuizLayer {
         gap: 0.25rem !important;
-        padding-bottom: 0.5rem !important;
+        padding-bottom: 0.25rem !important; /* Tighten bottom padding */
         margin-top: -0.5rem !important;
     }
 
@@ -2423,7 +2423,7 @@
 
     .quizNavigationButtons {
         gap: 0.8rem !important;
-        padding-bottom: 0.5rem !important;
+        padding-bottom: 0.25rem !important; /* Tighten bottom padding */
         margin-top: 0 !important;
     }
 
@@ -2783,9 +2783,11 @@
 
 .artifactSection {
     width: 100%;
+    flex: 1;
+    height: 100%;
     display: flex;
     flex-direction: column;
-    align-items: center;
+    justify-content: space-between;
     padding: 0 1rem;
     animation: fadeIn 0.8s ease-out;
 }
@@ -2905,10 +2907,20 @@
 }
 
 @media (max-width: 600px) {
+    .artifactSection {
+        flex: 1;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding-bottom: 0.25rem; /* Match quiz view bottom offset */
+    }
+
     .artifactGrid {
         grid-template-columns: 1fr 1fr;
         gap: 0.5rem;
         padding: 0 0.25rem;
+        margin-bottom: 0px !important; /* Let flex justification handle it */
     }
 
     .artifactCard {
