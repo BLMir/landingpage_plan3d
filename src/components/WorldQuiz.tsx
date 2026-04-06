@@ -441,8 +441,8 @@ export default function WorldQuiz() {
         const ringScale = 0.004 * 1.3 * 1.1;  
         const cometScale = 0.00004 * 1.3;
 
-        // Upright Neutral Rotation (MATCH LIVE VIEW)
-        const neutralRotation = new THREE.Euler(0, 0, 0);
+        // Upright Neutral Rotation (Rotate -90 in X as requested)
+        const neutralRotation = new THREE.Euler(Math.PI / -2, 0, 0);
 
         // Spatial Biome Seeds
         const pD = new THREE.Vector3(0.0, 0.4, -1.0).normalize();
@@ -470,19 +470,33 @@ export default function WorldQuiz() {
                             morphTargets.forEach((attr, idx) => {
                                 const mName = child.morphTargetDictionary ? Object.keys(child.morphTargetDictionary).find(k => child.morphTargetDictionary[k] === idx) : '';
                                 const k = mName?.toLowerCase() || '';
+                                const cName = child.name.toLowerCase();
                                 let w = 0;
                                 if (k.includes('desert')) w = mD;
                                 else if (k.includes('volcan')) w = mV;
                                 else if (k.includes('ocean')) w = mO;
                                 else if (k.includes('forest') || k.includes('high')) w = mF;
-                                else if (k.includes('ring_0')) w = iQ3;
-                                else if (k.includes('ring_1')) w = iQ3 > 0.5 ? Math.min(1.0, (iQ3 - 0.5) / 0.15) : 0;
-                                else if (k.includes('ring_2')) w = iQ3 > 0.65 ? Math.min(1.0, (iQ3 - 0.65) / 0.20) : 0;
-                                else if (k.includes('ring_3')) w = iQ3 > 0.85 ? Math.min(1.0, (iQ3 - 0.85) / 0.15) : 0;
-                                const boost = k.includes('ring') ? 1.0 : 1.0;
-                                x += (attr.getX(i) - v.x) * w * boost;
-                                y += (attr.getY(i) - v.y) * w * boost;
-                                z += (attr.getZ(i) - v.z) * w * boost;
+                                
+                                if (cName.includes('ring_0')) w = iQ3;
+                                else if (cName.includes('ring_1')) w = iQ3 > 0.5 ? Math.min(1.0, (iQ3 - 0.5) / 0.15) : 0;
+                                else if (cName.includes('ring_2')) w = iQ3 > 0.65 ? Math.min(1.0, (iQ3 - 0.65) / 0.20) : 0;
+                                else if (cName.includes('ring_3')) w = iQ3 > 0.85 ? Math.min(1.0, (iQ3 - 0.85) / 0.15) : 0;
+                                
+                                // Restore boost for rings if they feel small
+                                const boost = k.includes('ring') ? 1.4 : 1.8;
+                                
+                                // Determine if morph target is relative or absolute per-mesh
+                                // We check first vertex magnitude to decide (base vertices are ~250 units from origin)
+                                const mX = attr.getX(i), mY = attr.getY(i), mZ = attr.getZ(i);
+                                const isAbsolute = (mX*mX + mY*mY + mZ*mZ) > 2500; // > 50 units squared
+                                
+                                const dx = isAbsolute ? (mX - v.x) : mX;
+                                const dy = isAbsolute ? (mY - v.y) : mY;
+                                const dz = isAbsolute ? (mZ - v.z) : mZ;
+
+                                x += dx * w * boost;
+                                y += dy * w * boost;
+                                z += dz * w * boost;
                             });
                             pos.setXYZ(i, x, y, z);
                         }
@@ -501,9 +515,9 @@ export default function WorldQuiz() {
                     
                     const niGeom = geom.toNonIndexed();
                     const niPos = niGeom.getAttribute('position');
-                    
                     const cleanV: number[] = [];
-                    const cutY = -0.85 * 250 * baseScale; // Global Cut Y
+                    
+                    const cutY = -0.95 * 250 * baseScale; // Global Cut Y (Lowered to -0.95R)
 
                     // Triangle Pruning & Normal Flipping
                     for (let i = 0; i < niPos.count; i += 3) {
