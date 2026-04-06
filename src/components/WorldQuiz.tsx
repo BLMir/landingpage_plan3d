@@ -724,6 +724,17 @@ export default function WorldQuiz() {
                                 className={`${styles.globalPlanetContainer} ${styles.globalPlanetVisible}`}
                                 style={{ '--glow-color': currentGlowColor } as React.CSSProperties}
                             >
+                                {/* Live STL Export Button */}
+                                <button
+                                    className={styles.exportPlanetBtn}
+                                    onClick={handleDownloadSTL}
+                                    disabled={isGenerating}
+                                    title="Export current planet as STL"
+                                >
+                                    <Download size={14} />
+                                    <span>{isGenerating ? 'Baking...' : 'Export Draft'}</span>
+                                </button>
+
                                 <div className={styles.planetVisual} onPointerDown={() => setHasRotatedPlanet(true)}>
                                     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
                                         <Suspense fallback={<div className={styles.planetLoaderPlaceholder}>Establishing Connection...</div>}>
@@ -934,9 +945,7 @@ export default function WorldQuiz() {
                                 <p className={styles.emailSubtitle}>We will send you an email with your planet when is ready!</p>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'center', marginTop: '2rem' }}>
-                                <button className={styles.continueBtn} onClick={handleDownloadSTL}>
-                                    <Download /> Download 3D Printable STL
-                                </button>
+                                
                             </div>
                         </div>
                     </>
