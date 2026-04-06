@@ -435,14 +435,14 @@ export default function WorldQuiz() {
         ]);
 
         const finalGeometries: THREE.BufferGeometry[] = [];
-        const baseScale = 0.004; 
-        const forestScale = 0.385;
-        const cloudScale = 0.004; 
-        const ringScale = 0.004;  
-        const cometScale = 0.00004;
+        const baseScale = 0.004 * 1.3; 
+        const forestScale = 0.385 * 1.3;
+        const cloudScale = 0.004 * 1.3 * 1.14; 
+        const ringScale = 0.004 * 1.3 * 1.1;  
+        const cometScale = 0.00004 * 1.3;
 
-        // Digital Rotation
-        const digitalRotation = new THREE.Euler(THREE.MathUtils.degToRad(-9), THREE.MathUtils.degToRad(70), 0);
+        // Upright Neutral Rotation (MATCH LIVE VIEW)
+        const neutralRotation = new THREE.Euler(0, 0, 0);
 
         // Spatial Biome Seeds
         const pD = new THREE.Vector3(0.0, 0.4, -1.0).normalize();
@@ -479,7 +479,7 @@ export default function WorldQuiz() {
                                 else if (k.includes('ring_1')) w = iQ3 > 0.5 ? Math.min(1.0, (iQ3 - 0.5) / 0.15) : 0;
                                 else if (k.includes('ring_2')) w = iQ3 > 0.65 ? Math.min(1.0, (iQ3 - 0.65) / 0.20) : 0;
                                 else if (k.includes('ring_3')) w = iQ3 > 0.85 ? Math.min(1.0, (iQ3 - 0.85) / 0.15) : 0;
-                                const boost = k.includes('ring') ? 1.0 : 1.8;
+                                const boost = k.includes('ring') ? 1.0 : 1.0;
                                 x += (attr.getX(i) - v.x) * w * boost;
                                 y += (attr.getY(i) - v.y) * w * boost;
                                 z += (attr.getZ(i) - v.z) * w * boost;
@@ -496,8 +496,8 @@ export default function WorldQuiz() {
                     matrix.multiply(new THREE.Matrix4().makeScale(currentScale, currentScale, currentScale));
                     geom.applyMatrix4(matrix);
 
-                    // Apply Global Transform
-                    geom.applyMatrix4(new THREE.Matrix4().makeRotationFromEuler(digitalRotation));
+                    // Apply Global Transform (MATCH LIVE VIEW)
+                    geom.applyMatrix4(new THREE.Matrix4().makeRotationFromEuler(neutralRotation));
                     
                     const niGeom = geom.toNonIndexed();
                     const niPos = niGeom.getAttribute('position');
@@ -523,7 +523,7 @@ export default function WorldQuiz() {
                         const center = v1.clone().add(v2).add(v3).divideScalar(3);
                         
                         // We inverse-transform the center just for the growth alpha check to match original space
-                        const iRot = digitalRotation.clone();
+                        const iRot = neutralRotation.clone();
                         iRot.x *= -1; iRot.y *= -1; iRot.z *= -1;
                         const originalCenter = center.clone().applyEuler(iRot);
 
