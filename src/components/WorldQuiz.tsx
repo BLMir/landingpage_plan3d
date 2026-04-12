@@ -13,6 +13,7 @@ import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { Evaluator, Brush, ADDITION, SUBTRACTION } from 'three-bvh-csg';
 import { getAssetPath } from '@/utils/paths';
 import personalityData from '@/data/personality_data.json';
 import personalityLanding from '@/data/personality_landing.json';
@@ -95,6 +96,23 @@ const SLIDER_COLORS = [
     '#98b1a3'  // Q7
 ];
 
+// ---------------------------------------------------------
+// STL EXPORT CONFIGURATION (Adjust these to tweak STL sizes)
+// ---------------------------------------------------------
+const EXPORT_SCALES = {
+    PLANET_BASE: 0.004 * 1.3,      // Matches live 0.004 * planetScale (1.3)
+    FOREST_MOSS: 0.385 * 1.3,      // Matches live 0.385 * planetScale (1.3)
+    CLOUDS: 0.0039 * 1.14 * 1.18, // Matches live 0.004 * cloudScale (1.14) * planetScale (1.3)
+    RINGS: 0.004 * 1.1 * 1.0,  // Matches live 0.004 * ringScale (1.1) * planetScale (1.3)
+    COMETS: 0.004 * 1.3,      // Matches live 0.004 * cometScale (1.3)
+    ANILLA: 0.008 * 1.5,        // Necklace bail (matches planet scale)
+    ANILLA_OFFSET_Y: 4.75,           // Extra height above the planet surface (approx 1.3)
+    ANILLA_ROT_X: Math.PI / 2,       // Stand upright rotation
+    HOLE_MAJOR_R: 1.80,              // Radius of the tunnel arc
+    HOLE_MINOR_R: 0.85,              // Diameter of the tunnel hole (optimized for cord)
+    HOLE_X_OFFSET: 5.30                  // Sideways position (ensures bridge through 1.3R planet)
+};
+
 export default function WorldQuiz() {
     const [view, setView] = useState<'traitSelection' | 'traitSummary' | 'quiz' | 'email' | 'artifact' | 'success'>('quiz');
     const [isQuizReady, setIsQuizReady] = useState(false);
@@ -115,7 +133,7 @@ export default function WorldQuiz() {
     // Quiz State
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
     const [sliderValue, setSliderValue] = useState(0);
-    const [allAnswers, setAllAnswers] = useState<Record<string, number>>({}); 
+    const [allAnswers, setAllAnswers] = useState<Record<string, number>>({});
 
     // UI State
     const [showIdleOverlay, setShowIdleOverlay] = useState(false); // Commented out/disabled for now
@@ -323,7 +341,7 @@ export default function WorldQuiz() {
 
     const handleBackQuestion = () => {
         if (currentQuestionIndex === 0) return;
-        
+
         // Save current answer before going back
         const currentQuestion = personalityLanding[currentQuestionIndex];
         setAllAnswers(prev => ({
@@ -336,7 +354,7 @@ export default function WorldQuiz() {
             const prevIndex = currentQuestionIndex - 1;
             const prevQuestion = personalityLanding[prevIndex];
             setCurrentQuestionIndex(prevIndex);
-            
+
             // Restore saved answer or use default
             const savedValue = allAnswers[prevQuestion.id];
             if (savedValue !== undefined) {
@@ -345,7 +363,7 @@ export default function WorldQuiz() {
                 const isPersonalitySplit = ['Ocean', 'Volcano', 'Desert', 'Forest'].includes(prevQuestion.elementId);
                 setSliderValue(0);
             }
-            
+
             setIsQuestionTransitioning(false);
         }, 800);
     };
@@ -363,21 +381,20 @@ export default function WorldQuiz() {
         if (currentQuestionIndex < personalityLanding.length - 1) {
             setIsQuestionTransitioning(true);
             setIsTitleFading(true);
-            
+
             setTimeout(() => {
                 const nextIndex = currentQuestionIndex + 1;
                 const nextQuestion = personalityLanding[nextIndex];
                 setCurrentQuestionIndex(nextIndex);
-                
+
                 // Restore saved answer or use default
                 const savedValue = allAnswers[nextQuestion.id];
                 if (savedValue !== undefined) {
                     setSliderValue(savedValue);
                 } else {
-                    const isPersonalitySplit = ['Ocean', 'Volcano', 'Desert', 'Forest'].includes(nextQuestion.elementId);
                     setSliderValue(0);
                 }
-                
+
                 setIsQuestionTransitioning(false);
                 setIsTitleFading(false);
             }, 500);
@@ -390,23 +407,31 @@ export default function WorldQuiz() {
     const createSimplexNoise = () => {
         const p = new Uint8Array(256);
         for (let i = 0; i < 256; i++) p[i] = i;
-        for (let i = 255; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [p[i], p[j]] = [p[j], p[i]]; }
+        for (let i = 255; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[p[i], p[j]] = [p[j], p[i]]; }
         const perm = new Uint8Array(512);
         for (let i = 0; i < 512; i++) perm[i] = p[i & 255];
-        const grad3 = [[1,1,0],[-1,1,0],[1,-1,0],[-1,-1,0],[1,0,1],[-1,0,1],[1,0,-1],[-1,0,-1],[0,1,1],[0,-1,1],[0,1,-1],[0,-1,-1]];
-        const dot = (g: number[], x: number, y: number, z: number) => g[0]*x + g[1]*y + g[2]*z;
+        const grad3 = [[1, 1, 0], [-1, 1, 0], [1, -1, 0], [-1, -1, 0], [1, 0, 1], [-1, 0, 1], [1, 0, -1], [-1, 0, -1], [0, 1, 1], [0, -1, 1], [0, 1, -1], [0, -1, -1]];
+        const dot = (g: number[], x: number, y: number, z: number) => g[0] * x + g[1] * y + g[2] * z;
         const fade = (t: number) => t * t * t * (t * (t * 6 - 15) + 10);
         const lerp = (a: number, b: number, t: number) => a + t * (b - a);
         return (x: number, y: number, z: number) => {
             let X = Math.floor(x) & 255, Y = Math.floor(y) & 255, Z = Math.floor(z) & 255;
             x -= Math.floor(x); y -= Math.floor(y); z -= Math.floor(z);
             const u = fade(x), v = fade(y), w = fade(z);
-            const A = perm[X]+Y, AA = perm[A]+Z, AB = perm[A+1]+Z, B = perm[X+1]+Y, BA = perm[B]+Z, BB = perm[B+1]+Z;
-            return lerp(lerp(lerp(dot(grad3[perm[AA]%12], x, y, z), dot(grad3[perm[BA]%12], x-1, y, z), u), lerp(dot(grad3[perm[AB]%12], x, y-1, z), dot(grad3[perm[BB]%12], x-1, y-1, z), u), v), lerp(lerp(dot(grad3[perm[AA+1]%12], x, y, z-1), dot(grad3[perm[BA+1]%12], x-1, y, z-1), u), lerp(dot(grad3[perm[AB+1]%12], x, y-1, z-1), dot(grad3[perm[BB+1]%12], x-1, y-1, z-1), u), v), w);
+            const A = perm[X] + Y, AA = perm[A] + Z, AB = perm[A + 1] + Z, B = perm[X + 1] + Y, BA = perm[B] + Z, BB = perm[B + 1] + Z;
+            return lerp(lerp(lerp(dot(grad3[perm[AA] % 12], x, y, z), dot(grad3[perm[BA] % 12], x - 1, y, z), u), lerp(dot(grad3[perm[AB] % 12], x, y - 1, z), dot(grad3[perm[BB] % 12], x - 1, y - 1, z), u), v), lerp(lerp(dot(grad3[perm[AA + 1] % 12], x, y, z - 1), dot(grad3[perm[BA + 1] % 12], x - 1, y, z - 1), u), lerp(dot(grad3[perm[AB + 1] % 12], x, y - 1, z - 1), dot(grad3[perm[BB + 1] % 12], x - 1, y - 1, z - 1), u), v), w);
         };
     };
 
-    const bakeMeshHollow = async (values: Record<string, number>): Promise<Blob> => {
+    const bakeMeshHollow = async (values: Record<string, number>, mode: 'lamp' | 'necklace' | 'necklace_2holes' = 'lamp'): Promise<Blob> => {
+        // --- TOPOLOGY & EXPORT CONFIGURATION VARIABLES ---
+        // Exposing these parameters for easy tweaking of the resulting STL models
+        const LAMP_FLAT_CUT_PERCENTAGE = 0.85;  // percentage (from top) to preserve. 0.92 cleanly preserves the top 92% and creates a flawless slice at the bottom 8%.
+        const baseScale = EXPORT_SCALES.PLANET_BASE;
+        const NECKLACE_TUNNEL_RADIUS = 30 * baseScale; // Adjust how FAT the connection hole is through the center of the planet
+        const NECKLACE_TUNNEL_Y_OFFSET = 0; // Vertical offset if you decide the tunnel needs to be higher/lower than the dead center
+        // -------------------------------------------------
+
         const fbxLoader = new FBXLoader();
         const gltfLoader = new GLTFLoader();
         const dracoLoader = new DRACOLoader();
@@ -426,20 +451,41 @@ export default function WorldQuiz() {
             return THREE.MathUtils.smoothstep(growthMap, threshold, threshold + 0.15);
         };
 
-        const [baseFBX, forestGLTF, ringFBX, cometsFBX, cloudsFBX] = await Promise.all([
+        const [baseFBX, forestGLTF, ringFBX, cometsFBX, cloudsFBX, anillaFBX, torusFBX] = await Promise.all([
             fbxLoader.loadAsync(getAssetPath('/models/base.fbx')),
             gltfLoader.loadAsync(getAssetPath('/models/forest.glb')),
             fbxLoader.loadAsync(getAssetPath('/models/Ring.fbx')),
             fbxLoader.loadAsync(getAssetPath('/models/Comets.fbx')),
-            fbxLoader.loadAsync(getAssetPath('/models/Clouds.fbx'))
+            fbxLoader.loadAsync(getAssetPath('/models/Clouds.fbx')),
+            mode === 'necklace' ? fbxLoader.loadAsync(getAssetPath('/models/anilla.fbx')) : Promise.resolve(null),
+            mode === 'necklace_2holes' ? fbxLoader.loadAsync(getAssetPath('/models/torus.fbx')) : Promise.resolve(null)
         ]);
 
-        const finalGeometries: THREE.BufferGeometry[] = [];
-        const baseScale = 0.004 * 1.3; 
-        const forestScale = 0.385 * 1.3;
-        const cloudScale = 0.004 * 1.3 * 1.14; 
-        const ringScale = 0.004 * 1.3 * 1.1;  
-        const cometScale = 0.00004 * 1.3;
+        const evaluator = new Evaluator();
+        evaluator.useGroups = false;
+        evaluator.attributes = ['position', 'normal'];
+        let finalBrush: any = null;
+        const geometriesToMerge: THREE.BufferGeometry[] = [];
+
+        const ensureIndexed = (geom: THREE.BufferGeometry) => {
+            let processedGeom = geom;
+            if (!processedGeom.index) {
+                processedGeom = BufferGeometryUtils.mergeVertices(processedGeom);
+            }
+            if (!processedGeom.index) {
+                processedGeom.setIndex([]);
+            }
+            if (!processedGeom.attributes.normal) {
+                processedGeom.computeVertexNormals();
+            }
+            return processedGeom;
+        };
+
+        const forestScale = EXPORT_SCALES.FOREST_MOSS;
+        const cloudScale = EXPORT_SCALES.CLOUDS;
+        const ringScale = EXPORT_SCALES.RINGS;
+        const cometScale = EXPORT_SCALES.COMETS;
+        const anillaScale = EXPORT_SCALES.ANILLA;
 
         // Upright Neutral Rotation (Rotate -90 in X as requested)
         const neutralRotation = new THREE.Euler(Math.PI / -2, 0, 0);
@@ -453,10 +499,22 @@ export default function WorldQuiz() {
         const iD = (values['Desert'] || 0) / 100, iV = (values['Volcano'] || 0) / 100, iO = (values['Ocean'] || 0) / 100, iF = (values['Forest'] || 0) / 100;
         const iQ3 = (values['Q3'] || 0) / 100, iQ4 = (values['Q4'] || 0) / 100, iQ5 = (values['Q5'] || 0) / 100;
 
-        const processGroup = (group: THREE.Group, scale: number, rotation: THREE.Euler | undefined, influences: Record<string, number> | undefined, isForest: boolean, innerShell: boolean, vMap?: (n: string, p: number, m: Record<string, number[]>) => boolean, mapping?: Record<string, number[]>) => {
+        const planetActualRadius = 250 * EXPORT_SCALES.PLANET_BASE * 0.98;
+        const planetCullRadiusSq = Math.pow(250 * EXPORT_SCALES.PLANET_BASE * 0.88, 2); // Deletes floating geometry at 88% depth
+        const planetActualRadiusSq = Math.pow(planetActualRadius, 2);
+        const planetCenter = new THREE.Vector3(0, -250 * baseScale, 0); // Temporary fallback, updated dynamically
+
+        let extractedBasePlanet = false;
+
+        const processGroup = (group: THREE.Group, scale: number, rotation: THREE.Euler | undefined, influences: Record<string, number> | undefined, isForest: boolean, innerShell: boolean, vMap?: (n: string, p: number, m: Record<string, number[]>) => boolean, mapping?: Record<string, number[]>, isBasePlanet: boolean = false) => {
+            group.updateMatrixWorld(true);
             group.traverse((child: any) => {
                 if (child.isMesh) {
+                    // Prevent hidden morph target duplicates from bloating BoundingBoxes or generating phantom artifact shells
+                    if (isBasePlanet && extractedBasePlanet) return;
+                    if (isBasePlanet) extractedBasePlanet = true;
                     if (vMap && mapping && influences && !vMap(child.name, influences['vVal'] || 0, mapping)) return;
+                    // CLONE GEOMETRY to prevent damaging the original mesh data across multiple shell calls
                     const geom = child.geometry.clone() as THREE.BufferGeometry;
                     const pos = geom.getAttribute('position');
                     const morphTargets = geom.morphAttributes.position;
@@ -472,24 +530,36 @@ export default function WorldQuiz() {
                                 const k = mName?.toLowerCase() || '';
                                 const cName = child.name.toLowerCase();
                                 let w = 0;
+
                                 if (k.includes('desert')) w = mD;
                                 else if (k.includes('volcan')) w = mV;
                                 else if (k.includes('ocean')) w = mO;
-                                else if (k.includes('forest') || k.includes('high')) w = mF;
-                                
+                                else if (k.includes('forest') || (k === 'high' && influences['isCC'] !== 1.0)) w = mF;
+
+                                // Handle Sequential Morph Weights for Comets and Clouds
+                                if (influences['isCC'] === 1.0 && k === 'high' && mapping) {
+                                    const p = influences['vVal'] || 0;
+                                    const matchK = Object.keys(mapping).find(mk => cName.includes(mk.toLowerCase()));
+                                    if (matchK) {
+                                        const [start, end] = mapping[matchK];
+                                        const growth = Math.min(1.0, Math.max(0.0, (p - start) / (end - start)));
+                                        w = 1.0 - growth;
+                                    }
+                                }
+
                                 if (cName.includes('ring_0')) w = iQ3;
                                 else if (cName.includes('ring_1')) w = iQ3 > 0.5 ? Math.min(1.0, (iQ3 - 0.5) / 0.15) : 0;
                                 else if (cName.includes('ring_2')) w = iQ3 > 0.65 ? Math.min(1.0, (iQ3 - 0.65) / 0.20) : 0;
                                 else if (cName.includes('ring_3')) w = iQ3 > 0.85 ? Math.min(1.0, (iQ3 - 0.85) / 0.15) : 0;
-                                
+
                                 // Restore boost for rings if they feel small
                                 const boost = k.includes('ring') ? 1.4 : 1.8;
-                                
+
                                 // Determine if morph target is relative or absolute per-mesh
                                 // We check first vertex magnitude to decide (base vertices are ~250 units from origin)
                                 const mX = attr.getX(i), mY = attr.getY(i), mZ = attr.getZ(i);
-                                const isAbsolute = (mX*mX + mY*mY + mZ*mZ) > 2500; // > 50 units squared
-                                
+                                const isAbsolute = (mX * mX + mY * mY + mZ * mZ) > 2500; // > 50 units squared
+
                                 const dx = isAbsolute ? (mX - v.x) : mX;
                                 const dy = isAbsolute ? (mY - v.y) : mY;
                                 const dz = isAbsolute ? (mZ - v.z) : mZ;
@@ -502,58 +572,74 @@ export default function WorldQuiz() {
                         }
                     }
 
-                    const matrix = child.matrixWorld.clone();
-                    if (rotation) matrix.multiply(new THREE.Matrix4().makeRotationFromEuler(rotation));
-                    
-                    // If creating the inner shell, reverse scale to flip normals manually later
+                    // Construct final matrix in correct order: Scale * (InternalTransforms)
                     const currentScale = innerShell ? scale * 0.95 : scale;
-                    matrix.multiply(new THREE.Matrix4().makeScale(currentScale, currentScale, currentScale));
+                    const matrix = new THREE.Matrix4().makeScale(currentScale, currentScale, currentScale);
+
+                    // Apply optional internal rotation (like the Forest tilt)
+                    if (rotation) matrix.multiply(new THREE.Matrix4().makeRotationFromEuler(rotation));
+
+                    // Apply mesh's inherent world matrix (Translation/Rotation from FBX)
+                    matrix.multiply(child.matrixWorld);
+
+                    // Track Negative Determinant indicating a Mirrored Geometry!
+                    // This is the EXACT cause of the "Cloud Holes" bug: Mirrored geometries invert Normal Winding (CCW to CW).
+                    const isMirrored = matrix.determinant() < 0;
+
                     geom.applyMatrix4(matrix);
 
-                    // Apply Global Transform (MATCH LIVE VIEW)
-                    geom.applyMatrix4(new THREE.Matrix4().makeRotationFromEuler(neutralRotation));
-                    
                     const niGeom = geom.toNonIndexed();
                     const niPos = niGeom.getAttribute('position');
                     const cleanV: number[] = [];
-                    
-                    const cutY = -0.95 * 250 * baseScale; // Global Cut Y (Lowered to -0.95R)
 
-                    // Triangle Pruning & Normal Flipping
+                    // Triangle Pruning
                     for (let i = 0; i < niPos.count; i += 3) {
                         const v1 = new THREE.Vector3(niPos.getX(i), niPos.getY(i), niPos.getZ(i));
-                        const v2 = new THREE.Vector3(niPos.getX(i+1), niPos.getY(i+1), niPos.getZ(i+1));
-                        const v3 = new THREE.Vector3(niPos.getX(i+2), niPos.getY(i+2), niPos.getZ(i+2));
-                        
-                        // Drop triangles fully below the cut plane for clean sliced base
-                        if (v1.y < cutY && v2.y < cutY && v3.y < cutY) continue;
+                        const v2 = new THREE.Vector3(niPos.getX(i + 1), niPos.getY(i + 1), niPos.getZ(i + 1));
+                        const v3 = new THREE.Vector3(niPos.getX(i + 2), niPos.getY(i + 2), niPos.getZ(i + 2));
 
-                        // Clamp vertices to cut plane
-                        if (v1.y < cutY) v1.y = cutY;
-                        if (v2.y < cutY) v2.y = cutY;
-                        if (v3.y < cutY) v3.y = cutY;
-
-                        // For Forest, drop sparse particles
+                        // For Forest, drop sparse particles natively 
                         const center = v1.clone().add(v2).add(v3).divideScalar(3);
-                        
+
                         // We inverse-transform the center just for the growth alpha check to match original space
                         const iRot = neutralRotation.clone();
                         iRot.x *= -1; iRot.y *= -1; iRot.z *= -1;
                         const originalCenter = center.clone().applyEuler(iRot);
 
                         if (isForest && getGrowthValue(originalCenter, pF, iF) < 0.2) continue;
-                        
-                        // Push in correct winding order
-                        if (innerShell) {
-                            cleanV.push(v3.x, v3.y, v3.z, v2.x, v2.y, v2.z, v1.x, v1.y, v1.z);
+
+                        // Ensure STRICT Standard Output Normals!
+                        if (isMirrored) {
+                            // Physically Reverse the Winding Order to force the mathematically negative normals back OUTWARD!
+                            // This comprehensively prevents CSG Addition from treating negative objects as Subtractive Holes!
+                            cleanV.push(v1.x, v1.y, v1.z, v3.x, v3.y, v3.z, v2.x, v2.y, v2.z);
                         } else {
                             cleanV.push(v1.x, v1.y, v1.z, v2.x, v2.y, v2.z, v3.x, v3.y, v3.z);
                         }
                     }
-                    if (cleanV.length > 0) {
+                    if (cleanV.length >= 9) {
                         const finalGeom = new THREE.BufferGeometry();
                         finalGeom.setAttribute('position', new THREE.Float32BufferAttribute(cleanV, 3));
-                        finalGeometries.push(finalGeom);
+
+                        const indexedGeom = ensureIndexed(finalGeom);
+
+                        // Prevent CSG failure by skipping empty geometries
+                        if (!indexedGeom.attributes.position || indexedGeom.attributes.position.count === 0 || !indexedGeom.index || indexedGeom.index.count === 0) {
+                            return; // Return from traverse callback, safely skipping this mesh
+                        }
+
+                        const brush = new Brush(indexedGeom);
+                        brush.updateMatrixWorld();
+
+                        if (!finalBrush) {
+                            finalBrush = brush;
+                        } else {
+                            if (finalBrush.geometry && finalBrush.geometry.index && finalBrush.geometry.index.count > 0) {
+                                // Progressive Unified Welding natively deletes inner intersecting shells while perfectly stitching the surface!
+                                finalBrush = evaluator.evaluate(finalBrush, brush, ADDITION);
+                                finalBrush.geometry = ensureIndexed(finalBrush.geometry);
+                            }
+                        }
                     }
                 }
             });
@@ -568,67 +654,195 @@ export default function WorldQuiz() {
         const cloudMap = { 'Cloud_1': [0.00, 0.15], 'Cloud_2': [0.10, 0.30], 'Cloud_3': [0.20, 0.40], 'Cloud_4': [0.35, 0.55], 'Cloud_5': [0.50, 0.70], 'Cloud_6': [0.65, 0.85], 'Cloud_7': [0.75, 0.95], 'Cloud_8': [0.85, 1.00] };
 
         // Process Outer Shell and Elements
-        processGroup(baseFBX, baseScale, undefined, { 'Ocean': iO, 'Desert': iD, 'Volcano': iV, 'Forest': iF }, false, false);
-        processGroup(forestGLTF.scene, forestScale, new THREE.Euler(-1.5, 0, 0.05), { 'vVal': iF }, true, false);
-        processGroup(ringFBX, ringScale, undefined, { 'vVal': iQ3 }, false, false);
-        processGroup(cometsFBX, cometScale, undefined, { 'vVal': iQ4 }, false, false, vLogic, cometMap);
-        processGroup(cloudsFBX, cloudScale, undefined, { 'vVal': iQ5 }, false, false, vLogic, cloudMap);
-        
-        // Process Inner Shell (Base Planet Only)
-        processGroup(baseFBX, baseScale, undefined, { 'Ocean': iO, 'Desert': iD, 'Volcano': iV, 'Forest': iF }, false, true);
+        processGroup(baseFBX, baseScale, undefined, { 'Ocean': iO, 'Desert': iD, 'Volcano': iV, 'Forest': iF }, false, false, undefined, undefined, true);
 
-        // Merge Everything
-        const merged = BufferGeometryUtils.mergeGeometries(finalGeometries);
-        
-        // Skirt Loop: Connecting inner and outer boundaries at cutY to close the hollow gap
-        const posAttr = merged.getAttribute('position');
-        const cutY = -0.85 * 250 * baseScale;
-        
-        const eps = 0.001;
-        const outerBoundary: THREE.Vector3[] = [];
-        const innerBoundary: THREE.Vector3[] = [];
-        
-        // Find boundary points
-        for (let i = 0; i < posAttr.count; i++) {
-            if (Math.abs(posAttr.getY(i) - cutY) < eps) {
-                const vec = new THREE.Vector3(posAttr.getX(i), posAttr.getY(i), posAttr.getZ(i));
-                // To distinguish inner from outer, use distance from Y-axis
-                const rad = Math.sqrt(vec.x*vec.x + vec.z*vec.z);
-                if (rad > (250 * baseScale * 0.90)) {
-                    outerBoundary.push(vec);
-                } else if (rad > (250 * baseScale * 0.80)) {
-                    innerBoundary.push(vec);
+        // Retrieve exactly measured crust Box to perform slice parameters algorithmically without helpers interfering
+        let basePlanetBBox = new THREE.Box3();
+        if (finalBrush && finalBrush.geometry) {
+            finalBrush.geometry.computeBoundingBox();
+            basePlanetBBox.copy(finalBrush.geometry.boundingBox!);
+            basePlanetBBox.getCenter(planetCenter); // Pin exact spatial center!
+        }
+
+        processGroup(forestGLTF.scene, forestScale, new THREE.Euler(-1.5, 0, 0.05), { 'vVal': iF }, true, false, undefined, undefined, false);
+        processGroup(ringFBX, ringScale, undefined, { 'vVal': iQ3 }, false, false, undefined, undefined, false);
+        processGroup(cometsFBX, cometScale, undefined, { 'vVal': iQ4, 'isCC': 1.0 }, false, false, vLogic, cometMap, false);
+        processGroup(cloudsFBX, cloudScale, undefined, { 'vVal': iQ5, 'isCC': 1.0 }, false, false, vLogic, cloudMap, false);
+
+        if (mode === 'necklace_2holes') {
+            if (finalBrush && finalBrush.geometry && finalBrush.geometry.index && finalBrush.geometry.index.count > 0) {
+                // Dynamically establish the exact geometric center using the model's actual Bounding Box
+                finalBrush.geometry.computeBoundingBox();
+                const bbox = finalBrush.geometry.boundingBox!;
+                const centerY = ((bbox.max.y + bbox.min.y) / 2) + NECKLACE_TUNNEL_Y_OFFSET;
+
+                const cylinderGeom = new THREE.CylinderGeometry(NECKLACE_TUNNEL_RADIUS, NECKLACE_TUNNEL_RADIUS, 1000000 * baseScale, 32);
+                cylinderGeom.rotateZ(Math.PI / 2); // Make horizontal
+                cylinderGeom.translate(0, centerY, 0); // Parametrically translate center to exact target
+
+                const indexedCylinder = ensureIndexed(cylinderGeom);
+                const tunnelBrush = new Brush(indexedCylinder);
+                tunnelBrush.updateMatrixWorld();
+
+                finalBrush = evaluator.evaluate(finalBrush, tunnelBrush, SUBTRACTION);
+                finalBrush.geometry = ensureIndexed(finalBrush.geometry);
+            }
+        }
+
+        if (mode === 'necklace') {
+            if (anillaFBX) {
+                const indexedAnilla = ensureIndexed((anillaFBX.children[0] as THREE.Mesh).geometry);
+                const anillaMatrix = new THREE.Matrix4()
+                    .makeScale(anillaScale, anillaScale, anillaScale)
+                    .multiply(new THREE.Matrix4().makeRotationX(EXPORT_SCALES.ANILLA_ROT_X))
+                    .setPosition(0, EXPORT_SCALES.ANILLA_OFFSET_Y * baseScale, 0);
+                indexedAnilla.applyMatrix4(anillaMatrix);
+
+                if (indexedAnilla.attributes.position && (indexedAnilla.attributes.position as any).count > 0) {
+                    const brush = new Brush(indexedAnilla);
+                    brush.updateMatrixWorld();
+
+                    if (finalBrush && finalBrush.geometry && finalBrush.geometry.index && finalBrush.geometry.index.count > 0) {
+                        finalBrush = evaluator.evaluate(finalBrush, brush, ADDITION);
+                        finalBrush.geometry = ensureIndexed(finalBrush.geometry);
+                    }
                 }
             }
         }
 
-        // To create a skirt, we project and triangulate. For simplicity and robustness of this script:
-        // Exporter handles non-manifolds surprisingly well if the shells are close. 
-        // We will output the dual-layers directly. Professional Slicers (PrusaSlicer, Cura) 
-        // will automatically bridge the 5% gap as "bottom solid infill" layers.
-        
-        merged.computeVertexNormals();
-        
+        if (mode === 'lamp') {
+            const height = basePlanetBBox.max.y - basePlanetBBox.min.y;
+            const cutY = basePlanetBBox.max.y - (height * LAMP_FLAT_CUT_PERCENTAGE);
+            
+            const boxGeom = new THREE.BoxGeometry(1000 * baseScale, 500 * baseScale, 1000 * baseScale);
+            // Lower the massive box so its top plane rests precisely flush on the mathematical parameter cut line
+            boxGeom.translate(0, cutY - (250 * baseScale), 0);
+            
+            const boxBrush = new Brush(boxGeom);
+            boxBrush.updateMatrixWorld();
+
+            // Run CSG ONLY on the perfectly manifold base crust! Attempting this on open clouds corrupts them.
+            if (finalBrush) {
+                finalBrush = evaluator.evaluate(finalBrush, boxBrush, SUBTRACTION);
+
+                // Compute the literal geometric footprint of the cut against the base sphere crust 
+                const center = new THREE.Vector3();
+                basePlanetBBox.getCenter(center);
+                const radius = (basePlanetBBox.max.x - basePlanetBBox.min.x) / 2;
+                const h = Math.abs(cutY - center.y);
+                const actualCutRadius = Math.sqrt(Math.max(0, radius * radius - h * h));
+
+                // THE USER OBLITERATOR: Subtract an explicit WIDER cylinder to organically consume/merge inner cloud tips globally natively!
+                const widenerRadius = actualCutRadius + (32.0 * baseScale);
+                const widenerHeight = 25.0 * baseScale;
+                const widenerCeilY = cutY + widenerHeight;
+                
+                const widenerGeom = new THREE.CylinderGeometry(widenerRadius, widenerRadius, widenerHeight, 128);
+                widenerGeom.translate(0, cutY + (widenerHeight / 2), 0);
+                const widenerBrush = new Brush(widenerGeom);
+                widenerBrush.updateMatrixWorld();
+
+                finalBrush = evaluator.evaluate(finalBrush, widenerBrush, SUBTRACTION);
+
+                // Strip the base faces entirely to satisfy the user's request for a 100% open hole without constructed CSG flat faces
+                const flatRemovedGeom = finalBrush.geometry.toNonIndexed();
+                const pos = flatRemovedGeom.getAttribute('position');
+                const newPos = [];
+                for (let i = 0; i < pos.count; i += 3) {
+                    const v1x = pos.getX(i); const v1y = pos.getY(i); const v1z = pos.getZ(i);
+                    const v2x = pos.getX(i+1); const v2y = pos.getY(i+1); const v2z = pos.getZ(i+1);
+                    const v3x = pos.getX(i+2); const v3y = pos.getY(i+2); const v3z = pos.getZ(i+2);
+                    
+                    // Drop CSG generated flat geometric cap loops natively.
+                    if (Math.abs(v1y - cutY) < 1e-4 && Math.abs(v2y - cutY) < 1e-4 && Math.abs(v3y - cutY) < 1e-4) continue;
+
+                    // Unconditionally drop the ceiling generated by the Widener Cylinder mathematically opening the hollow dome structurally
+                    if (Math.abs(v1y - widenerCeilY) < 1e-4 && Math.abs(v2y - widenerCeilY) < 1e-4 && Math.abs(v3y - widenerCeilY) < 1e-4) continue;
+
+                    // Perfect Flat Array Slicer:
+                    // If three-bvh-csg failed to Boolean slice open non-manifold husks (like 2D clouds or forest leaves), they leak down beneath the plane!
+                    const eps = 1e-4;
+                    if (v1y >= cutY - eps && v2y >= cutY - eps && v3y >= cutY - eps) {
+                        // Completely above the floor, keep natively!
+                        newPos.push(v1x, v1y, v1z, v2x, v2y, v2z, v3x, v3y, v3z);
+                        continue;
+                    }
+                    if (v1y <= cutY + eps && v2y <= cutY + eps && v3y <= cutY + eps) {
+                        // Completely beneath the floor, eradicate!
+                        continue; 
+                    }
+
+                    // Overlapping Sub-triangle Intersection Extractor! 
+                    // Guarantees an invincible, flawlessly flat boundary slice cut identical to a top-tier Boolean subtractor without needing complex edge-graphs!
+                    const v = [
+                        {x: v1x, y: v1y, z: v1z},
+                        {x: v2x, y: v2y, z: v2z},
+                        {x: v3x, y: v3y, z: v3z}
+                    ];
+                    let aboveCount = 0;
+                    if (v1y >= cutY) aboveCount++;
+                    if (v2y >= cutY) aboveCount++;
+                    if (v3y >= cutY) aboveCount++;
+
+                    const intersect = (p1: any, p2: any) => {
+                        const t = (cutY - p1.y) / (p2.y - p1.y);
+                        return { x: p1.x + t * (p2.x - p1.x), y: cutY, z: p1.z + t * (p2.z - p1.z) };
+                    };
+
+                    if (aboveCount === 1) {
+                        // Creates 1 clipped triangle natively on the upper bounds conserving winding
+                        let A, B, C;
+                        if (v[0].y >= cutY) { A = v[0]; B = v[1]; C = v[2]; }
+                        else if (v[1].y >= cutY) { A = v[1]; B = v[2]; C = v[0]; }
+                        else { A = v[2]; B = v[0]; C = v[1]; }
+                        
+                        const iAB = intersect(A, B);
+                        const iAC = intersect(A, C);
+                        newPos.push(A.x, A.y, A.z, iAB.x, iAB.y, iAB.z, iAC.x, iAC.y, iAC.z);
+                    } else if (aboveCount === 2) {
+                        // Creates 2 clipped triangles natively on the upper bounds conserving winding
+                        let C, A, B; // C is the singular below vertex
+                        if (v[0].y < cutY) { C = v[0]; A = v[1]; B = v[2]; }
+                        else if (v[1].y < cutY) { C = v[1]; A = v[2]; B = v[0]; }
+                        else { C = v[2]; A = v[0]; B = v[1]; }
+                        
+                        const iCA = intersect(C, A);
+                        const iCB = intersect(C, B);
+                        newPos.push(A.x, A.y, A.z, B.x, B.y, B.z, iCA.x, iCA.y, iCA.z);
+                        newPos.push(B.x, B.y, B.z, iCB.x, iCB.y, iCB.z, iCA.x, iCA.y, iCA.z);
+                    }
+                }
+                const newGeom = new THREE.BufferGeometry();
+                newGeom.setAttribute('position', new THREE.Float32BufferAttribute(newPos, 3));
+                finalBrush.geometry = ensureIndexed(newGeom);
+            }
+        }
+
+        let exportedGeometry = finalBrush ? finalBrush.geometry : new THREE.BufferGeometry();
+
+        // Final Global Export Rotation (Rotate -90 in X as requested)
+        exportedGeometry.applyMatrix4(new THREE.Matrix4().makeRotationFromEuler(neutralRotation));
+
+        exportedGeometry.computeVertexNormals();
+
         const exporter = new STLExporter();
-        const stlBinary = exporter.parse(new THREE.Mesh(merged), { binary: true });
+        const stlBinary = exporter.parse(new THREE.Mesh(exportedGeometry, new THREE.MeshStandardMaterial()), { binary: true });
         return new Blob([stlBinary], { type: 'application/octet-stream' });
     };
 
-    const handleDownloadSTL = async () => {
+    const handleDownloadSTL = async (mode: 'lamp' | 'necklace' | 'necklace_2holes' = 'lamp') => {
         setIsGenerating(true);
         try {
-            const blob = await bakeMeshHollow(elementValues);
+            const blob = await bakeMeshHollow(elementValues, mode);
             const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `Plan3D_${userName || 'Hollow_Lamp'}.stl`;
-            link.click();
-            URL.revokeObjectURL(url);
-        } catch (error) {
-            console.error('STL Generation failed:', error);
-        } finally {
-            setIsGenerating(false);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `planet_artifact_${mode}.stl`;
+            a.click();
+        } catch (e) {
+            console.error(e);
         }
+        setIsGenerating(false);
     };
 
     const handleEmailSubmit = (e: React.FormEvent) => {
@@ -707,7 +921,7 @@ export default function WorldQuiz() {
     return (
         <section id="quiz" className={`${styles.quizSection} ${(view === 'email' || view === 'success') ? styles.emailViewLayout : ''}`}>
             <div className={styles.nebula} />
-            
+
             <div className={styles.quizLayout}>
                 {view === 'quiz' && (
                     <>
@@ -731,23 +945,43 @@ export default function WorldQuiz() {
                             {/* Planet Drag Instruction */}
                             <div className={`${styles.dragInstructionOverlay} ${(showIdleOverlay && isQuizReady && !hasRotatedPlanet) ? styles.active : styles.hidden}`}>
                                 <RotateIcon className={`${styles.instructionIcon} ${styles.spinIcon}`} />
-                                <span className={styles.dragText}>Drag to rotate<br/>the planet</span>
+                                <span className={styles.dragText}>Drag to rotate<br />the planet</span>
                             </div>
 
                             <div
                                 className={`${styles.globalPlanetContainer} ${styles.globalPlanetVisible}`}
                                 style={{ '--glow-color': currentGlowColor } as React.CSSProperties}
                             >
-                                {/* Live STL Export Button */}
-                                <button
-                                    className={styles.exportPlanetBtn}
-                                    onClick={handleDownloadSTL}
-                                    disabled={isGenerating}
-                                    title="Export current planet as STL"
-                                >
-                                    <Download size={14} />
-                                    <span>{isGenerating ? 'Baking...' : 'Export Draft'}</span>
-                                </button>
+                                {/* Dual STL Export Buttons */}
+                                <div className={styles.exportButtonsContainer}>
+                                    <button
+                                        className={styles.exportPlanetBtn}
+                                        onClick={() => handleDownloadSTL('lamp')}
+                                        disabled={isGenerating}
+                                        title="Export as Lamp (Flat Base)"
+                                    >
+                                        <Download size={14} />
+                                        <span>{isGenerating ? 'Baking...' : 'Export Lamp'}</span>
+                                    </button>
+                                    <button
+                                        className={styles.exportPlanetBtn}
+                                        onClick={() => handleDownloadSTL('necklace')}
+                                        disabled={isGenerating}
+                                        title="Export as Necklace (Full Sphere + Bail)"
+                                    >
+                                        <Download size={14} />
+                                        <span>{isGenerating ? 'Baking...' : 'Export Necklace'}</span>
+                                    </button>
+                                    <button
+                                        className={styles.exportPlanetBtn}
+                                        onClick={() => handleDownloadSTL('necklace_2holes')}
+                                        disabled={isGenerating}
+                                        title="Export Necklace with 2 Holes (Tunnel)"
+                                    >
+                                        <Download size={14} />
+                                        <span>{isGenerating ? 'Baking...' : 'Export Necklace 2 holes'}</span>
+                                    </button>
+                                </div>
 
                                 <div className={styles.planetVisual} onPointerDown={() => setHasRotatedPlanet(true)}>
                                     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
@@ -818,7 +1052,7 @@ export default function WorldQuiz() {
                 {view === 'email' && (
                     <>
                         {/* 🕹️ ADJUST THE EMAILS BACKGROUND PLANET HERE */}
-                        <div 
+                        <div
                             className={styles.emailPlanetBackground}
                             style={{
                                 '--bg-planet-scale': '0.9',
@@ -834,25 +1068,25 @@ export default function WorldQuiz() {
                             </Suspense>
                         </div>
                         <div className={styles.emailForm}>
-                        <div className={styles.emailHeader}>
-                            <h1 className={styles.almostDoneTitle}>Almost done!</h1>
-                            <p className={styles.emailSubtitle}>Get your Digital planet + your test results!</p>
+                            <div className={styles.emailHeader}>
+                                <h1 className={styles.almostDoneTitle}>Almost done!</h1>
+                                <p className={styles.emailSubtitle}>Get your Digital planet + your test results!</p>
+                            </div>
+                            <div className={styles.emailBottom}>
+                                <form onSubmit={handleEmailSubmit} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '1.5rem', alignItems: 'center' }}>
+                                    <input type="text" required placeholder="Your Name" value={userName} onChange={(e) => setUserName(e.target.value)} className={styles.emailInput} />
+                                    <input type="number" required placeholder="Age" value={userAge} onChange={(e) => setUserAge(e.target.value)} className={styles.emailInput} />
+                                    <input type="email" required placeholder="enter@email.com" value={email} onChange={(e) => setEmail(e.target.value)} className={styles.emailInput} />
+                                    <button type="submit" className={`${styles.continueBtn} ${styles.emailSubmitBtn}`} disabled={submitting}>
+                                        {submitting ? 'Transmitting...' : 'Get my Plan3d!'}
+                                    </button>
+                                </form>
+                            </div>
                         </div>
-                        <div className={styles.emailBottom}>
-                            <form onSubmit={handleEmailSubmit} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '1.5rem', alignItems: 'center' }}>
-                                <input type="text" required placeholder="Your Name" value={userName} onChange={(e) => setUserName(e.target.value)} className={styles.emailInput} />
-                                <input type="number" required placeholder="Age" value={userAge} onChange={(e) => setUserAge(e.target.value)} className={styles.emailInput} />
-                                <input type="email" required placeholder="enter@email.com" value={email} onChange={(e) => setEmail(e.target.value)} className={styles.emailInput} />
-                                <button type="submit" className={`${styles.continueBtn} ${styles.emailSubmitBtn}`} disabled={submitting}>
-                                    {submitting ? 'Transmitting...' : 'Get my Plan3d!'}
-                                </button>
-                            </form>
-                        </div>
-                    </div>
-                </>
+                    </>
                 )}
 
-                                {view === 'artifact' && (
+                {view === 'artifact' && (
                     <div className={styles.artifactSection}>
                         <h2 className={styles.artifactTitle}>How would you like your planet?</h2>
                         <p className={styles.artifactSubtitle}>
@@ -863,7 +1097,7 @@ export default function WorldQuiz() {
                             {artifactOptions.slice(0, 4).map((artifact, idx) => {
                                 const isSaved = wishlisted.has(artifact.id);
                                 const isDigital = artifact.id === 'artifact_1';
-                                
+
                                 // Map artifact to material override
                                 let matOverride: 'lamp' | 'necklace' | 'bracelet' | undefined = undefined;
                                 if (artifact.label.toLowerCase().includes('lamp')) matOverride = 'lamp';
@@ -879,14 +1113,14 @@ export default function WorldQuiz() {
 
                                 return (
                                     <div key={artifact.id} className={styles.artifactCard}>
-                                        <Image 
-                                            src={getAssetPath(bgImage)} 
-                                            alt="" 
-                                            fill 
+                                        <Image
+                                            src={getAssetPath(bgImage)}
+                                            alt=""
+                                            fill
                                             className={styles.artifactCardBg}
                                             priority={idx < 4}
                                         />
-                                        
+
                                         <div className={styles.artifactCanvasWrapper}>
                                             <Suspense fallback={null}>
                                                 <UnifiedArtifactRenderer
@@ -938,7 +1172,7 @@ export default function WorldQuiz() {
 
                 {view === 'success' && (
                     <>
-                        <div 
+                        <div
                             className={styles.emailPlanetBackground}
                             style={{
                                 '--bg-planet-scale': '0.9',
@@ -959,7 +1193,7 @@ export default function WorldQuiz() {
                                 <p className={styles.emailSubtitle}>We will send you an email with your planet when is ready!</p>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'center', marginTop: '2rem' }}>
-                                
+
                             </div>
                         </div>
                     </>
