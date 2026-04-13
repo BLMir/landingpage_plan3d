@@ -108,8 +108,8 @@ const EXPORT_SCALES = {
     ANILLA: 0.008 * 1.5,        // Necklace bail (matches planet scale)
     ANILLA_OFFSET_Y: 4.75,           // Extra height above the planet surface (approx 1.3)
     ANILLA_ROT_X: Math.PI / 2,       // Stand upright rotation
-    HOLE_MAJOR_R: 1.80,              // Radius of the tunnel arc
-    HOLE_MINOR_R: 0.85,              // Diameter of the tunnel hole (optimized for cord)
+    HOLE_MAJOR_R: 400.80,              // Radius of the tunnel arc
+    HOLE_MINOR_R: 280,              // Diameter of the tunnel hole (optimized for cord)
     HOLE_X_OFFSET: 5.30                  // Sideways position (ensures bridge through 1.3R planet)
 };
 
@@ -423,12 +423,12 @@ export default function WorldQuiz() {
         };
     };
 
-    const bakeMeshHollow = async (values: Record<string, number>, mode: 'lamp' | 'necklace' | 'necklace_2holes' = 'lamp'): Promise<Blob> => {
+    const bakeMeshHollow = async (values: Record<string, number>, mode: 'lamp' | 'necklace' | 'bracelet' = 'lamp'): Promise<Blob> => {
         // --- TOPOLOGY & EXPORT CONFIGURATION VARIABLES ---
         // Exposing these parameters for easy tweaking of the resulting STL models
-        const LAMP_FLAT_CUT_PERCENTAGE = 0.85;  // percentage (from top) to preserve. 0.92 cleanly preserves the top 92% and creates a flawless slice at the bottom 8%.
+        const LAMP_FLAT_CUT_PERCENTAGE = 0.88;  // percentage (from top) to preserve. 0.92 cleanly preserves the top 92% and creates a flawless slice at the bottom 8%.
         const baseScale = EXPORT_SCALES.PLANET_BASE;
-        const NECKLACE_TUNNEL_RADIUS = 30 * baseScale; // Adjust how FAT the connection hole is through the center of the planet
+        const NECKLACE_TUNNEL_RADIUS = 240 * baseScale; // Adjust how FAT the connection hole is through the center of the planet
         const NECKLACE_TUNNEL_Y_OFFSET = 0; // Vertical offset if you decide the tunnel needs to be higher/lower than the dead center
         // -------------------------------------------------
 
@@ -451,14 +451,12 @@ export default function WorldQuiz() {
             return THREE.MathUtils.smoothstep(growthMap, threshold, threshold + 0.15);
         };
 
-        const [baseFBX, forestGLTF, ringFBX, cometsFBX, cloudsFBX, anillaFBX, torusFBX] = await Promise.all([
+        const [baseFBX, forestGLTF, ringFBX, cometsFBX, cloudsFBX] = await Promise.all([
             fbxLoader.loadAsync(getAssetPath('/models/base.fbx')),
             gltfLoader.loadAsync(getAssetPath('/models/forest.glb')),
             fbxLoader.loadAsync(getAssetPath('/models/Ring.fbx')),
             fbxLoader.loadAsync(getAssetPath('/models/Comets.fbx')),
-            fbxLoader.loadAsync(getAssetPath('/models/Clouds.fbx')),
-            mode === 'necklace' ? fbxLoader.loadAsync(getAssetPath('/models/anilla.fbx')) : Promise.resolve(null),
-            mode === 'necklace_2holes' ? fbxLoader.loadAsync(getAssetPath('/models/torus.fbx')) : Promise.resolve(null)
+            fbxLoader.loadAsync(getAssetPath('/models/Clouds.fbx'))
         ]);
 
         const evaluator = new Evaluator();
@@ -598,15 +596,30 @@ export default function WorldQuiz() {
                         const v2 = new THREE.Vector3(niPos.getX(i + 1), niPos.getY(i + 1), niPos.getZ(i + 1));
                         const v3 = new THREE.Vector3(niPos.getX(i + 2), niPos.getY(i + 2), niPos.getZ(i + 2));
 
-                        // For Forest, drop sparse particles natively 
-                        const center = v1.clone().add(v2).add(v3).divideScalar(3);
+                        if (isForest) {
+                            const iRot = neutralRotation.clone();
+                            iRot.x *= -1; iRot.y *= -1; iRot.z *= -1;
 
-                        // We inverse-transform the center just for the growth alpha check to match original space
-                        const iRot = neutralRotation.clone();
-                        iRot.x *= -1; iRot.y *= -1; iRot.z *= -1;
-                        const originalCenter = center.clone().applyEuler(iRot);
+                            const checkGrowth = (v: THREE.Vector3) => {
+                                const originalPos = v.clone().applyEuler(iRot);
+                                return getGrowthValue(originalPos, pF, iF) >= 0.2;
+                            };
 
-                        if (isForest && getGrowthValue(originalCenter, pF, iF) < 0.2) continue;
+                            const keep1 = checkGrowth(v1);
+                            const keep2 = checkGrowth(v2);
+                            const keep3 = checkGrowth(v3);
+
+                            if (!keep1 && !keep2 && !keep3) continue; // Fully transparent triangle, safe to drop natively
+
+                            // Topological Edge Capper v3 (Micro-Skirt Sealing)!
+                            // Instead of crashing canopy boundaries deep downwards (which created ugly stalactite geometries bleeding visibly towards 0,0 inside hollow bases),
+                            // we mathematically drop the severed leaf vertices JUST beneath the lowest possible point of the planetary crust (85% depth, below the 88% ocean floor).
+                            // This seamlessly stitches a miniature closed "skirt" that disappears harmlessly into the dirt, keeping the inner planet volume perfectly clean!
+                            const plunge = (v: THREE.Vector3) => v.normalize().multiplyScalar(250 * baseScale * 0.85);
+                            if (!keep1) plunge(v1);
+                            if (!keep2) plunge(v2);
+                            if (!keep3) plunge(v3);
+                        }
 
                         // Ensure STRICT Standard Output Normals!
                         if (isMirrored) {
@@ -669,15 +682,21 @@ export default function WorldQuiz() {
         processGroup(cometsFBX, cometScale, undefined, { 'vVal': iQ4, 'isCC': 1.0 }, false, false, vLogic, cometMap, false);
         processGroup(cloudsFBX, cloudScale, undefined, { 'vVal': iQ5, 'isCC': 1.0 }, false, false, vLogic, cloudMap, false);
 
-        if (mode === 'necklace_2holes') {
+        if (mode === 'bracelet') {
             if (finalBrush && finalBrush.geometry && finalBrush.geometry.index && finalBrush.geometry.index.count > 0) {
                 // Dynamically establish the exact geometric center using the model's actual Bounding Box
                 finalBrush.geometry.computeBoundingBox();
                 const bbox = finalBrush.geometry.boundingBox!;
                 const centerY = ((bbox.max.y + bbox.min.y) / 2) + NECKLACE_TUNNEL_Y_OFFSET;
 
+                // Optimized cylinder bounds (Pierces through even the most distant external Planetary Rings!)
                 const cylinderGeom = new THREE.CylinderGeometry(NECKLACE_TUNNEL_RADIUS, NECKLACE_TUNNEL_RADIUS, 1000000 * baseScale, 32);
                 cylinderGeom.rotateZ(Math.PI / 2); // Make horizontal
+                
+                // CSG Anti-aliasing! Roll the cylinder slightly by half a topological segment.
+                // This violently solves mathematical topological gaps natively because it guarantees the cylinder faces never exactly geometrically align with horizontal/vertical universe grids!
+                cylinderGeom.rotateX(Math.PI / 64); 
+                
                 cylinderGeom.translate(0, centerY, 0); // Parametrically translate center to exact target
 
                 const indexedCylinder = ensureIndexed(cylinderGeom);
@@ -690,34 +709,40 @@ export default function WorldQuiz() {
         }
 
         if (mode === 'necklace') {
-            if (anillaFBX) {
-                const indexedAnilla = ensureIndexed((anillaFBX.children[0] as THREE.Mesh).geometry);
-                const anillaMatrix = new THREE.Matrix4()
-                    .makeScale(anillaScale, anillaScale, anillaScale)
-                    .multiply(new THREE.Matrix4().makeRotationX(EXPORT_SCALES.ANILLA_ROT_X))
-                    .setPosition(0, EXPORT_SCALES.ANILLA_OFFSET_Y * baseScale, 0);
-                indexedAnilla.applyMatrix4(anillaMatrix);
+            if (finalBrush && finalBrush.geometry && finalBrush.geometry.index && finalBrush.geometry.index.count > 0) {
+                // Feature Pivot: Retire external Anilla mesh in favor of parametrically carving a dual-hole U-tube tunnel!
+                const tunnelRadius = EXPORT_SCALES.HOLE_MAJOR_R * baseScale;
+                const tunnelTube = EXPORT_SCALES.HOLE_MINOR_R * baseScale;
 
-                if (indexedAnilla.attributes.position && (indexedAnilla.attributes.position as any).count > 0) {
-                    const brush = new Brush(indexedAnilla);
-                    brush.updateMatrixWorld();
+                // Torus dynamically generates a sweeping circular path perfectly engineered for necklace cords.
+                const torusGeom = new THREE.TorusGeometry(tunnelRadius, tunnelTube, 32, 64);
 
-                    if (finalBrush && finalBrush.geometry && finalBrush.geometry.index && finalBrush.geometry.index.count > 0) {
-                        finalBrush = evaluator.evaluate(finalBrush, brush, ADDITION);
-                        finalBrush.geometry = ensureIndexed(finalBrush.geometry);
-                    }
-                }
+                // Shift perfectly to the crust apex! The top arc exposes the holes, the lower arc hollows the crust.
+                torusGeom.translate(
+                    EXPORT_SCALES.HOLE_X_OFFSET * baseScale,
+                    basePlanetBBox.max.y,
+                    0
+                );
+
+                const indexedTorus = ensureIndexed(torusGeom);
+                const torusBrush = new Brush(indexedTorus);
+                torusBrush.updateMatrixWorld();
+
+                // Natively subtract the Torus volume exactly like the 2Holes cylinder!
+                finalBrush = evaluator.evaluate(finalBrush, torusBrush, SUBTRACTION);
+                finalBrush.geometry = ensureIndexed(finalBrush.geometry);
             }
         }
+
 
         if (mode === 'lamp') {
             const height = basePlanetBBox.max.y - basePlanetBBox.min.y;
             const cutY = basePlanetBBox.max.y - (height * LAMP_FLAT_CUT_PERCENTAGE);
-            
+
             const boxGeom = new THREE.BoxGeometry(1000 * baseScale, 500 * baseScale, 1000 * baseScale);
             // Lower the massive box so its top plane rests precisely flush on the mathematical parameter cut line
             boxGeom.translate(0, cutY - (250 * baseScale), 0);
-            
+
             const boxBrush = new Brush(boxGeom);
             boxBrush.updateMatrixWorld();
 
@@ -736,7 +761,7 @@ export default function WorldQuiz() {
                 const widenerRadius = actualCutRadius + (32.0 * baseScale);
                 const widenerHeight = 25.0 * baseScale;
                 const widenerCeilY = cutY + widenerHeight;
-                
+
                 const widenerGeom = new THREE.CylinderGeometry(widenerRadius, widenerRadius, widenerHeight, 128);
                 widenerGeom.translate(0, cutY + (widenerHeight / 2), 0);
                 const widenerBrush = new Brush(widenerGeom);
@@ -750,9 +775,9 @@ export default function WorldQuiz() {
                 const newPos = [];
                 for (let i = 0; i < pos.count; i += 3) {
                     const v1x = pos.getX(i); const v1y = pos.getY(i); const v1z = pos.getZ(i);
-                    const v2x = pos.getX(i+1); const v2y = pos.getY(i+1); const v2z = pos.getZ(i+1);
-                    const v3x = pos.getX(i+2); const v3y = pos.getY(i+2); const v3z = pos.getZ(i+2);
-                    
+                    const v2x = pos.getX(i + 1); const v2y = pos.getY(i + 1); const v2z = pos.getZ(i + 1);
+                    const v3x = pos.getX(i + 2); const v3y = pos.getY(i + 2); const v3z = pos.getZ(i + 2);
+
                     // Drop CSG generated flat geometric cap loops natively.
                     if (Math.abs(v1y - cutY) < 1e-4 && Math.abs(v2y - cutY) < 1e-4 && Math.abs(v3y - cutY) < 1e-4) continue;
 
@@ -769,15 +794,15 @@ export default function WorldQuiz() {
                     }
                     if (v1y <= cutY + eps && v2y <= cutY + eps && v3y <= cutY + eps) {
                         // Completely beneath the floor, eradicate!
-                        continue; 
+                        continue;
                     }
 
                     // Overlapping Sub-triangle Intersection Extractor! 
                     // Guarantees an invincible, flawlessly flat boundary slice cut identical to a top-tier Boolean subtractor without needing complex edge-graphs!
                     const v = [
-                        {x: v1x, y: v1y, z: v1z},
-                        {x: v2x, y: v2y, z: v2z},
-                        {x: v3x, y: v3y, z: v3z}
+                        { x: v1x, y: v1y, z: v1z },
+                        { x: v2x, y: v2y, z: v2z },
+                        { x: v3x, y: v3y, z: v3z }
                     ];
                     let aboveCount = 0;
                     if (v1y >= cutY) aboveCount++;
@@ -795,7 +820,7 @@ export default function WorldQuiz() {
                         if (v[0].y >= cutY) { A = v[0]; B = v[1]; C = v[2]; }
                         else if (v[1].y >= cutY) { A = v[1]; B = v[2]; C = v[0]; }
                         else { A = v[2]; B = v[0]; C = v[1]; }
-                        
+
                         const iAB = intersect(A, B);
                         const iAC = intersect(A, C);
                         newPos.push(A.x, A.y, A.z, iAB.x, iAB.y, iAB.z, iAC.x, iAC.y, iAC.z);
@@ -805,7 +830,7 @@ export default function WorldQuiz() {
                         if (v[0].y < cutY) { C = v[0]; A = v[1]; B = v[2]; }
                         else if (v[1].y < cutY) { C = v[1]; A = v[2]; B = v[0]; }
                         else { C = v[2]; A = v[0]; B = v[1]; }
-                        
+
                         const iCA = intersect(C, A);
                         const iCB = intersect(C, B);
                         newPos.push(A.x, A.y, A.z, B.x, B.y, B.z, iCA.x, iCA.y, iCA.z);
@@ -818,19 +843,28 @@ export default function WorldQuiz() {
             }
         }
 
-        let exportedGeometry = finalBrush ? finalBrush.geometry : new THREE.BufferGeometry();
+        const finalGeometries: THREE.BufferGeometry[] = [];
+        if (finalBrush && finalBrush.geometry) {
+            finalGeometries.push(finalBrush.geometry.clone());
+        }
 
-        // Final Global Export Rotation (Rotate -90 in X as requested)
-        exportedGeometry.applyMatrix4(new THREE.Matrix4().makeRotationFromEuler(neutralRotation));
+        const exportGroup = new THREE.Group();
 
-        exportedGeometry.computeVertexNormals();
+        finalGeometries.forEach(geom => {
+            // Apply the global layout rotation uniformly to every independent mesh!
+            geom.applyMatrix4(new THREE.Matrix4().makeRotationFromEuler(neutralRotation));
+            geom.computeVertexNormals();
+            exportGroup.add(new THREE.Mesh(geom, new THREE.MeshStandardMaterial()));
+        });
+
+        exportGroup.updateMatrixWorld(true);
 
         const exporter = new STLExporter();
-        const stlBinary = exporter.parse(new THREE.Mesh(exportedGeometry, new THREE.MeshStandardMaterial()), { binary: true });
+        const stlBinary = exporter.parse(exportGroup, { binary: true });
         return new Blob([stlBinary], { type: 'application/octet-stream' });
     };
 
-    const handleDownloadSTL = async (mode: 'lamp' | 'necklace' | 'necklace_2holes' = 'lamp') => {
+    const handleDownloadSTL = async (mode: 'lamp' | 'necklace' | 'bracelet' = 'lamp') => {
         setIsGenerating(true);
         try {
             const blob = await bakeMeshHollow(elementValues, mode);
@@ -974,12 +1008,12 @@ export default function WorldQuiz() {
                                     </button>
                                     <button
                                         className={styles.exportPlanetBtn}
-                                        onClick={() => handleDownloadSTL('necklace_2holes')}
+                                        onClick={() => handleDownloadSTL('bracelet')}
                                         disabled={isGenerating}
-                                        title="Export Necklace with 2 Holes (Tunnel)"
+                                        title="Export Bracelet"
                                     >
                                         <Download size={14} />
-                                        <span>{isGenerating ? 'Baking...' : 'Export Necklace 2 holes'}</span>
+                                        <span>{isGenerating ? 'Baking...' : 'Export Bracelet'}</span>
                                     </button>
                                 </div>
 

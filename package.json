@@ -14,7 +14,9 @@
     "next": "16.0.10",
     "react": "19.2.1",
     "react-dom": "19.2.1",
-    "three": "^0.182.0"
+    "three": "^0.182.0",
+    "three-bvh-csg": "^0.0.18",
+    "three-mesh-bvh": "^0.9.9"
   },
   "devDependencies": {
     "@types/node": "^20",
